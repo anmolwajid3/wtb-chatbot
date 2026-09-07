@@ -1,0 +1,15 @@
+# Python backend
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.env
+*.pyc
+
+# Next.js admin panel
+admin-panel/node_modules/
+admin-panel/.next/
+admin-panel/.env.local
+
+# OS junk
+.DS_Store
+Thumbs.db

@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WTB — Coach finder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --black: #0A0A0A;
+    --black-soft: #141414;
+    --card: #1A1918;
+    --card-hover: #201F1D;
+    --border: #2E2C29;
+    --amber: #EFA33B;
+    --amber-dark: #C97F1E;
+    --amber-tint: rgba(239, 163, 59, 0.12);
+    --cream: #F3EFE6;
+    --cream-soft: #B8B2A6;
+    --radius-lg: 18px;
+    --radius-md: 12px;
+    --shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.55);
+    --tier-high: #6FCB7C;
+    --tier-mid: #EFA33B;
+    --tier-low: #E8897A;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--black);
+    color: var(--cream);
+    min-height: 100vh;
+  }
+
+  /* ---- Demo host page (placeholder "website" behind the widget) ---- */
+  .demo-page {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 100px 24px 180px;
+    text-align: center;
+  }
+  .demo-page .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--amber);
+    background: var(--amber-tint);
+    border: 1px solid rgba(239, 163, 59, 0.3);
+    padding: 6px 14px;
+    border-radius: 100px;
+    margin-bottom: 28px;
+  }
+  .demo-page h1 {
+    font-family: 'Oswald', sans-serif;
+    font-weight: 600;
+    font-size: 42px;
+    line-height: 1.15;
+    letter-spacing: 0.01em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin: 0 0 20px;
+  }
+  .demo-page p {
+    color: var(--cream-soft);
+    font-size: 16px;
+    line-height: 1.7;
+    margin: 0 0 8px;
+  }
+  .demo-note {
+    display: inline-block;
+    margin-top: 36px;
+    padding: 10px 18px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--cream-soft);
+    border-radius: 100px;
+    font-size: 13px;
+  }
+
+  /* ---- Launcher ---- */
+  #launcher {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 62px;
+    height: 62px;
+    border-radius: 50%;
+    background: var(--black-soft);
+    border: 1.5px solid var(--amber);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow);
+    z-index: 1000;
+    transition: transform 0.2s ease, background 0.2s ease;
+  }
+  #launcher:hover { transform: scale(1.05); background: var(--card-hover); }
+  #launcher:focus-visible { outline: 3px solid var(--amber); outline-offset: 3px; }
+
+  #launcher .pulse-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 1.5px solid var(--amber);
+    opacity: 0.55;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    #launcher .pulse-ring { animation: pulse 2.8s ease-out infinite; }
+  }
+  @keyframes pulse {
+    0% { transform: scale(1); opacity: 0.5; }
+    100% { transform: scale(1.65); opacity: 0; }
+  }
+
+  #launcher svg { width: 26px; height: 26px; z-index: 1; position: relative; }
+
+  /* ---- Panel ---- */
+  #panel {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 390px;
+    max-width: calc(100vw - 32px);
+    height: 610px;
+    max-height: calc(100vh - 48px);
+    background: var(--black-soft);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 1000;
+    border: 1px solid var(--border);
+  }
+  #panel.open { display: flex; }
+
+  #panel.fullscreen {
+    width: 100vw;
+    height: 100vh;
+    max-width: 100vw;
+    max-height: 100vh;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 0;
+    border: none;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    #panel.open { animation: rise 0.25s ease-out; }
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  #panel-header {
+    background: var(--black);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 20px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  #panel-header .title-block { display: flex; flex-direction: column; gap: 6px; }
+  #panel-header .brand {
+    font-family: 'Oswald', sans-serif;
+    font-weight: 600;
+    font-size: 16px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--amber);
+  }
+  #panel-header .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    color: var(--cream-soft);
+  }
+  #panel-header .status-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--amber);
+    flex-shrink: 0;
+  }
+  #close-btn {
+    background: none;
+    border: none;
+    color: var(--cream-soft);
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    border-radius: 6px;
+  }
+  #close-btn:hover { color: var(--cream); background: var(--card); }
+  #close-btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  #close-btn svg { width: 18px; height: 18px; }
+
+  #fullscreen-btn {
+    background: none;
+    border: none;
+    color: var(--cream-soft);
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    border-radius: 6px;
+    margin-right: 4px;
+  }
+  #fullscreen-btn:hover { color: var(--cream); background: var(--card); }
+  #fullscreen-btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  #fullscreen-btn svg { width: 17px; height: 17px; }
+
+  #messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    background: var(--black-soft);
+  }
+
+  .msg { display: flex; }
+  .msg.user { justify-content: flex-end; }
+  .msg.bot { justify-content: flex-start; }
+
+  .bubble {
+    max-width: 84%;
+    padding: 12px 16px;
+    font-size: 14.5px;
+    line-height: 1.55;
+    border-radius: var(--radius-md);
+    white-space: pre-wrap;
+  }
+  .msg.user .bubble {
+    background: var(--amber);
+    color: #241A0A;
+    font-weight: 500;
+    border-bottom-right-radius: 4px;
+  }
+  .msg.bot .bubble {
+    background: var(--card);
+    color: var(--cream);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 4px;
+  }
+
+  .thinking { display: flex; align-items: center; gap: 5px; padding: 4px 4px 4px 0; }
+  .thinking span {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--amber);
+    opacity: 0.5;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .thinking span { animation: arc 1.2s ease-in-out infinite; }
+    .thinking span:nth-child(2) { animation-delay: 0.15s; }
+    .thinking span:nth-child(3) { animation-delay: 0.3s; }
+  }
+  @keyframes arc {
+    0%, 100% { transform: translateY(0); opacity: 0.4; }
+    50% { transform: translateY(-4px); opacity: 1; }
+  }
+
+  .coach-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 84%;
+    margin-top: 4px;
+  }
+  .coach-card {
+    display: flex;
+    gap: 12px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px;
+  }
+  .coach-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: var(--black-soft);
+    border: 1px solid var(--border);
+  }
+  .coach-avatar-placeholder {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--black-soft);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--cream-soft);
+    font-size: 18px;
+    font-family: 'Oswald', sans-serif;
+  }
+  .coach-info { flex: 1; min-width: 0; }
+  .coach-name-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 2px;
+  }
+  .coach-name {
+    font-family: 'Oswald', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--amber);
+  }
+  .coach-program {
+    font-size: 12px;
+    color: var(--cream-soft);
+  }
+  .coach-desc {
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--cream-soft);
+    margin: 4px 0 8px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .match-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .match-bar-track {
+    flex: 1;
+    height: 6px;
+    border-radius: 100px;
+    background: var(--black-soft);
+    overflow: hidden;
+  }
+  .match-bar-fill {
+    height: 100%;
+    border-radius: 100px;
+    transition: width 0.4s ease;
+  }
+  .match-score-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--cream-soft);
+    flex-shrink: 0;
+    min-width: 62px;
+    text-align: right;
+  }
+
+  .coach-graph-wrap {
+    max-width: 92%;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px 8px;
+    margin-top: 4px;
+  }
+  .coach-graph-wrap svg { display: block; width: 100%; height: auto; }
+
+  .coach-clickable, .coach-node-clickable { cursor: pointer; }
+  .coach-clickable:hover { border-color: var(--amber); }
+
+  .coach-detail-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(10, 10, 10, 0.88);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 50;
+  }
+  .coach-detail-overlay[hidden] { display: none; }
+  .coach-detail-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 26px 20px 20px;
+    max-width: 320px;
+    width: 100%;
+    max-height: 92%;
+    overflow-y: auto;
+    position: relative;
+    text-align: center;
+  }
+  .coach-detail-close {
+    position: absolute;
+    top: 8px; right: 8px;
+    background: none;
+    border: none;
+    color: var(--cream-soft);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: 6px;
+  }
+  .coach-detail-close:hover { color: var(--cream); background: var(--card-hover); }
+  .coach-detail-avatar {
+    width: 84px; height: 84px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin: 0 auto 14px;
+    display: block;
+    border: 2px solid var(--amber);
+  }
+  .coach-detail-avatar-placeholder {
+    width: 84px; height: 84px;
+    border-radius: 50%;
+    margin: 0 auto 14px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--black-soft);
+    border: 2px solid var(--amber);
+    color: var(--amber);
+    font-family: 'Oswald', sans-serif;
+    font-size: 28px;
+    font-weight: 600;
+  }
+  #coach-detail-name {
+    font-family: 'Oswald', sans-serif;
+    color: var(--amber);
+    font-size: 17px;
+    margin: 0 0 2px;
+  }
+  #coach-detail-program {
+    color: var(--cream-soft);
+    font-size: 13px;
+    margin: 0 0 12px;
+  }
+  #coach-detail-desc {
+    color: var(--cream);
+    font-size: 13.5px;
+    line-height: 1.6;
+    text-align: left;
+    margin: 0 0 14px;
+  }
+  .coach-detail-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+    margin-bottom: 16px;
+  }
+  .coach-detail-meta span {
+    font-size: 11px;
+    background: var(--black-soft);
+    border: 1px solid var(--border);
+    color: var(--cream-soft);
+    padding: 4px 10px;
+    border-radius: 100px;
+  }
+  #coach-detail-match-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 18px;
+  }
+  .coach-detail-select-btn {
+    width: 100%;
+    background: var(--amber);
+    color: #241A0A;
+    border: none;
+    border-radius: var(--radius-md);
+    padding: 12px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .coach-detail-select-btn:hover { background: var(--amber-dark); }
+  .coach-detail-select-btn:disabled { background: var(--border); color: var(--cream-soft); cursor: not-allowed; }
+
+  #input-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 14px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--black);
+  }
+  #msg-input {
+    flex: 1;
+    resize: none;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 10px 14px;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    max-height: 100px;
+    color: var(--cream);
+  }
+  #msg-input::placeholder { color: var(--cream-soft); }
+  #msg-input:focus-visible {
+    outline: none;
+    border-color: var(--amber);
+    box-shadow: 0 0 0 3px var(--amber-tint);
+  }
+  #send-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--amber);
+    border: none;
+    color: #241A0A;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.15s ease;
+  }
+  #send-btn:hover { background: var(--amber-dark); }
+  #send-btn:disabled { background: var(--border); color: var(--cream-soft); cursor: not-allowed; }
+  #send-btn:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  #send-btn svg { width: 17px; height: 17px; }
+
+  .error-note {
+    font-size: 13px;
+    color: #E8897A;
+    background: rgba(232, 137, 122, 0.1);
+    border: 1px solid rgba(232, 137, 122, 0.3);
+    border-radius: var(--radius-md);
+    padding: 10px 14px;
+    margin: 0 20px 14px;
+  }
+
+  @media (max-width: 480px) {
+    #panel { right: 16px; bottom: 16px; width: calc(100vw - 32px); height: calc(100vh - 100px); }
+    #launcher { right: 16px; bottom: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="demo-page">
+  <span class="eyebrow">● WTB coaching services</span>
+  <h1>Find the coach<br>that fits your team</h1>
+  <p>Describe the situation in your own words — no forms, no dropdowns.</p>
+  <p>The assistant in the corner asks a couple of questions and points you toward the right fit.</p>
+  <div class="demo-note">This is a placeholder demo page — the widget below is what would embed on wtb.fi</div>
+</div>
+
+<button id="launcher" aria-label="Open coach-finder chat" aria-expanded="false">
+  <span class="pulse-ring" aria-hidden="true"></span>
+  <svg viewBox="0 0 24 24" fill="none" stroke="#EFA33B" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+  </svg>
+</button>
+
+<div id="panel" role="dialog" aria-label="WTB coach finder chat" aria-hidden="true">
+  <div id="panel-header">
+    <div class="title-block">
+      <span class="brand">WTB coach finder</span>
+      <span class="status-pill"><span class="status-dot"></span>Usually replies in a few seconds</span>
+    </div>
+    <button id="fullscreen-btn" aria-label="Expand to full screen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+    </button>
+    <button id="close-btn" aria-label="Close chat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div id="messages"></div>
+
+  <div id="coach-detail-overlay" class="coach-detail-overlay" hidden>
+    <div class="coach-detail-card">
+      <button id="coach-detail-close" class="coach-detail-close" aria-label="Close">&times;</button>
+      <div id="coach-detail-avatar-wrap"></div>
+      <h3 id="coach-detail-name"></h3>
+      <p id="coach-detail-program"></p>
+      <p id="coach-detail-desc"></p>
+      <div id="coach-detail-meta" class="coach-detail-meta"></div>
+      <div id="coach-detail-match-row"></div>
+      <button id="coach-detail-select-btn" class="coach-detail-select-btn">Select this coach</button>
+    </div>
+  </div>
+
+  <div id="input-bar">
+    <textarea id="msg-input" rows="1" placeholder="Describe what you're looking for..." aria-label="Message"></textarea>
+    <button id="send-btn" aria-label="Send message">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+    </button>
+  </div>
+</div>
+
+<script>
+  const API_URL = 'http://localhost:8000/chat';
+  let conversationId = null;
+  let currentCoachMatches = [];
+
+  const launcher = document.getElementById('launcher');
+  const panel = document.getElementById('panel');
+  const closeBtn = document.getElementById('close-btn');
+  const fullscreenBtn = document.getElementById('fullscreen-btn');
+  const messagesEl = document.getElementById('messages');
+  const input = document.getElementById('msg-input');
+  const sendBtn = document.getElementById('send-btn');
+
+  const EXPAND_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>';
+  const COLLAPSE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>';
+
+  function toggleFullscreen() {
+    const isFullscreen = panel.classList.toggle('fullscreen');
+    fullscreenBtn.innerHTML = isFullscreen ? COLLAPSE_ICON : EXPAND_ICON;
+    fullscreenBtn.setAttribute('aria-label', isFullscreen ? 'Exit full screen' : 'Expand to full screen');
+    scrollToBottom();
+  }
+
+  fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+  function openPanel() {
+    panel.classList.add('open');
+    panel.setAttribute('aria-hidden', 'false');
+    launcher.setAttribute('aria-expanded', 'true');
+    launcher.style.display = 'none';
+    if (messagesEl.children.length === 0) {
+      addBotMessage("Hi! Tell me a bit about what you're looking for — a theme, a situation, a team size, whatever comes to mind — and I'll help point you to the right coach.");
+    }
+    input.focus();
+  }
+
+  function closePanel() {
+    panel.classList.remove('open');
+    panel.setAttribute('aria-hidden', 'true');
+    launcher.setAttribute('aria-expanded', 'false');
+    launcher.style.display = 'flex';
+  }
+
+  launcher.addEventListener('click', openPanel);
+  closeBtn.addEventListener('click', closePanel);
+
+  function addUserMessage(text) {
+    const row = document.createElement('div');
+    row.className = 'msg user';
+    row.innerHTML = '<div class="bubble"></div>';
+    row.querySelector('.bubble').textContent = text;
+    messagesEl.appendChild(row);
+    scrollToBottom();
+  }
+
+  function addBotMessage(text) {
+    const row = document.createElement('div');
+    row.className = 'msg bot';
+    row.innerHTML = '<div class="bubble"></div>';
+    row.querySelector('.bubble').textContent = text;
+    messagesEl.appendChild(row);
+    scrollToBottom();
+  }
+
+  function scoreTierColor(score) {
+    if (score >= 75) return 'var(--tier-high)';
+    if (score >= 50) return 'var(--tier-mid)';
+    return 'var(--tier-low)';
+  }
+
+  // Hardcoded hex, not CSS var() — SVG <marker> defs referencing var() inside
+  // dynamically-injected markup are unreliable across browsers, so the graph
+  // specifically uses fixed hex matching the same three tier colors.
+  function scoreTierHex(score) {
+    if (score >= 75) return '#6FCB7C';
+    if (score >= 50) return '#EFA33B';
+    return '#E8897A';
+  }
+
+  function escapeXml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function buildCoachGraphSvg(coachMatches) {
+    const nodeSpacing = 84;
+    const topPadding = 34;
+    const width = 300;
+    const nodeRadius = 20;
+    const lastCoachY = topPadding + nodeSpacing * (coachMatches.length - 1);
+    const height = lastCoachY + nodeRadius + 35; // extra room so the last name label isn't clipped
+    const userX = 42;
+    const userY = topPadding + (nodeSpacing * (coachMatches.length - 1)) / 2; // vertically centered on the coach nodes, not on total canvas height
+    const coachX = width - 46;
+
+    let defs = '<defs>';
+    ['#6FCB7C', '#EFA33B', '#E8897A'].forEach((hex, i) => {
+      defs += '<marker id="graph-arrow-' + i + '" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">' +
+        '<path d="M1 1L9 5L1 9" fill="none" stroke="' + hex + '" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></marker>';
+    });
+    defs += '</defs>';
+
+    const colorToMarkerIndex = { '#6FCB7C': 0, '#EFA33B': 1, '#E8897A': 2 };
+
+    let lines = '';
+    let labels = '';
+    let coachNodes = '';
+
+    coachMatches.forEach((coach, i) => {
+      const coachY = topPadding + i * nodeSpacing;
+      const score = Math.max(0, Math.min(100, Math.round(coach.match_score || 0)));
+      const hex = scoreTierHex(score);
+      const markerIdx = colorToMarkerIndex[hex];
+      const midX = (userX + coachX) / 2;
+      const midY = (userY + coachY) / 2;
+
+      lines += '<line x1="' + userX + '" y1="' + userY + '" x2="' + (coachX - nodeRadius - 6) + '" y2="' + coachY +
+        '" stroke="' + hex + '" stroke-width="2" marker-end="url(#graph-arrow-' + markerIdx + ')" />';
+
+      labels += '<text x="' + midX + '" y="' + (midY - 9) + '" fill="' + hex + '" font-size="11" font-weight="600" ' +
+        'text-anchor="middle" font-family="Inter, sans-serif">' + score + '% match</text>';
+
+      let nodeVisual;
+      if (coach.image_url) {
+        const clipId = 'coach-clip-' + i;
+        nodeVisual = '<defs><clipPath id="' + clipId + '"><circle cx="' + coachX + '" cy="' + coachY + '" r="' + nodeRadius + '" /></clipPath></defs>' +
+          '<image href="' + escapeXml(coach.image_url) + '" x="' + (coachX - nodeRadius) + '" y="' + (coachY - nodeRadius) +
+          '" width="' + (nodeRadius * 2) + '" height="' + (nodeRadius * 2) + '" clip-path="url(#' + clipId + ')" preserveAspectRatio="xMidYMid slice" />' +
+          '<circle cx="' + coachX + '" cy="' + coachY + '" r="' + nodeRadius + '" fill="none" stroke="' + hex + '" stroke-width="2" />';
+      } else {
+        const initial = escapeXml((coach.coach_name || '?').charAt(0).toUpperCase());
+        nodeVisual = '<circle cx="' + coachX + '" cy="' + coachY + '" r="' + nodeRadius + '" fill="#141414" stroke="' + hex + '" stroke-width="2" />' +
+          '<text x="' + coachX + '" y="' + (coachY + 5) + '" fill="' + hex + '" font-size="14" font-weight="600" ' +
+          'text-anchor="middle" font-family="Oswald, sans-serif">' + initial + '</text>';
+      }
+
+      let name = coach.coach_name || '';
+      if (name.length > 15) name = name.slice(0, 14) + '\u2026';
+      coachNodes += '<g class="coach-node-clickable" data-coach-index="' + i + '">' +
+        nodeVisual +
+        '<text x="' + coachX + '" y="' + (coachY + nodeRadius + 15) + '" fill="#F3EFE6" font-size="11" ' +
+        'text-anchor="middle" font-family="Inter, sans-serif">' + escapeXml(name) + '</text>' +
+        '</g>';
+    });
+
+    const userNode =
+      '<circle cx="' + userX + '" cy="' + userY + '" r="' + nodeRadius + '" fill="#141414" stroke="#EFA33B" stroke-width="2" />' +
+      '<text x="' + userX + '" y="' + (userY + 5) + '" fill="#EFA33B" font-size="10.5" font-weight="600" ' +
+      'text-anchor="middle" font-family="Inter, sans-serif">You</text>';
+
+    return '<svg viewBox="0 0 ' + width + ' ' + height + '" xmlns="http://www.w3.org/2000/svg">' +
+      defs + lines + labels + userNode + coachNodes + '</svg>';
+  }
+
+  function addCoachGraph(coachMatches) {
+    if (!coachMatches || coachMatches.length < 2) return;
+    currentCoachMatches = coachMatches;
+
+    const row = document.createElement('div');
+    row.className = 'msg bot';
+    const wrap = document.createElement('div');
+    wrap.className = 'coach-graph-wrap';
+    wrap.innerHTML = buildCoachGraphSvg(coachMatches);
+    row.appendChild(wrap);
+    messagesEl.appendChild(row);
+    scrollToBottom();
+  }
+
+  function addCoachCards(coachMatches) {
+    if (!coachMatches || coachMatches.length === 0) return;
+    currentCoachMatches = coachMatches;
+
+    const row = document.createElement('div');
+    row.className = 'msg bot';
+    const cardsWrap = document.createElement('div');
+    cardsWrap.className = 'coach-cards';
+
+    coachMatches.forEach((coach, i) => {
+      const card = document.createElement('div');
+      card.className = 'coach-card coach-clickable';
+      card.setAttribute('data-coach-index', String(i));
+
+      let avatarHtml;
+      if (coach.image_url) {
+        avatarHtml = '<img class="coach-avatar" alt="" src="' + coach.image_url + '" onerror="this.style.display=\'none\'">';
+      } else {
+        const initial = (coach.coach_name || '?').charAt(0).toUpperCase();
+        avatarHtml = '<div class="coach-avatar-placeholder">' + initial + '</div>';
+      }
+
+      const score = Math.max(0, Math.min(100, Math.round(coach.match_score || 0)));
+      const color = scoreTierColor(score);
+
+      card.innerHTML =
+        avatarHtml +
+        '<div class="coach-info">' +
+          '<div class="coach-name-row">' +
+            '<span class="coach-name"></span>' +
+            '<span class="coach-program"></span>' +
+          '</div>' +
+          '<p class="coach-desc"></p>' +
+          '<div class="match-row">' +
+            '<div class="match-bar-track"><div class="match-bar-fill" style="width:' + score + '%; background:' + color + '"></div></div>' +
+            '<span class="match-score-label">' + score + '% match</span>' +
+          '</div>' +
+        '</div>';
+
+      card.querySelector('.coach-name').textContent = coach.coach_name || '';
+      card.querySelector('.coach-program').textContent = coach.program_name || '';
+      card.querySelector('.coach-desc').textContent = coach.short_description || '';
+
+      cardsWrap.appendChild(card);
+    });
+
+    row.appendChild(cardsWrap);
+    messagesEl.appendChild(row);
+    scrollToBottom();
+  }
+
+  function addThinkingIndicator() {
+    const row = document.createElement('div');
+    row.className = 'msg bot';
+    row.id = 'thinking-row';
+    row.innerHTML = '<div class="bubble thinking"><span></span><span></span><span></span></div>';
+    messagesEl.appendChild(row);
+    scrollToBottom();
+  }
+
+  function removeThinkingIndicator() {
+    const row = document.getElementById('thinking-row');
+    if (row) row.remove();
+  }
+
+  function addErrorNote(text) {
+    const note = document.createElement('div');
+    note.className = 'error-note';
+    note.textContent = text;
+    messagesEl.appendChild(note);
+    scrollToBottom();
+  }
+
+  function scrollToBottom() {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  async function sendMessage() {
+    const text = input.value.trim();
+    if (!text) return;
+
+    addUserMessage(text);
+    input.value = '';
+    input.style.height = 'auto';
+    sendBtn.disabled = true;
+    addThinkingIndicator();
+
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversation_id: conversationId, message: text }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Server responded with ' + response.status);
+      }
+
+      const data = await response.json();
+      conversationId = data.conversation_id;
+      removeThinkingIndicator();
+      addBotMessage(data.reply);
+      currentCoachMatches = data.coach_matches || [];
+      if (data.coach_matches && data.coach_matches.length === 1) {
+        addCoachCards(data.coach_matches);
+      } else if (data.coach_matches && data.coach_matches.length > 1) {
+        addCoachGraph(data.coach_matches);
+      }
+    } catch (err) {
+      removeThinkingIndicator();
+      addErrorNote("Couldn't reach the assistant just now — check that the backend is running, then try again.");
+      console.error(err);
+    } finally {
+      sendBtn.disabled = false;
+      input.focus();
+    }
+  }
+
+  const detailOverlay = document.getElementById('coach-detail-overlay');
+  const detailClose = document.getElementById('coach-detail-close');
+  const detailAvatarWrap = document.getElementById('coach-detail-avatar-wrap');
+  const detailName = document.getElementById('coach-detail-name');
+  const detailProgram = document.getElementById('coach-detail-program');
+  const detailDesc = document.getElementById('coach-detail-desc');
+  const detailMeta = document.getElementById('coach-detail-meta');
+  const detailMatchRow = document.getElementById('coach-detail-match-row');
+  const detailSelectBtn = document.getElementById('coach-detail-select-btn');
+
+  let activeDetailCoach = null;
+
+  function openCoachDetail(coach) {
+    activeDetailCoach = coach;
+
+    if (coach.image_url) {
+      detailAvatarWrap.innerHTML = '<img class="coach-detail-avatar" alt="" src="' + coach.image_url + '" onerror="this.style.display=\'none\'">';
+    } else {
+      const initial = (coach.coach_name || '?').charAt(0).toUpperCase();
+      detailAvatarWrap.innerHTML = '<div class="coach-detail-avatar-placeholder">' + initial + '</div>';
+    }
+
+    detailName.textContent = coach.coach_name || '';
+    detailProgram.textContent = coach.program_name || '';
+    detailDesc.textContent = coach.long_description || coach.short_description || '';
+
+    detailMeta.innerHTML = '';
+    [coach.target_group, coach.delivery_format, coach.duration].filter(Boolean).forEach((item) => {
+      const span = document.createElement('span');
+      span.textContent = item;
+      detailMeta.appendChild(span);
+    });
+
+    const score = Math.max(0, Math.min(100, Math.round(coach.match_score || 0)));
+    const color = scoreTierColor(score);
+    detailMatchRow.innerHTML =
+      '<div class="match-bar-track"><div class="match-bar-fill" style="width:' + score + '%; background:' + color + '"></div></div>' +
+      '<span class="match-score-label">' + score + '% match</span>';
+
+    detailSelectBtn.disabled = false;
+    detailSelectBtn.textContent = 'Select this coach';
+
+    detailOverlay.hidden = false;
+  }
+
+  function closeCoachDetail() {
+    detailOverlay.hidden = true;
+    activeDetailCoach = null;
+  }
+
+  detailClose.addEventListener('click', closeCoachDetail);
+  detailOverlay.addEventListener('click', (e) => {
+    if (e.target === detailOverlay) closeCoachDetail();
+  });
+
+  detailSelectBtn.addEventListener('click', async () => {
+    if (!activeDetailCoach || !activeDetailCoach.coach_id) return;
+    const coach = activeDetailCoach;
+    detailSelectBtn.disabled = true;
+    detailSelectBtn.textContent = 'Selecting...';
+
+    closeCoachDetail();
+    addThinkingIndicator();
+
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          message: '',
+          selected_coach_id: coach.coach_id,
+        }),
+      });
+      if (!response.ok) throw new Error('Server responded with ' + response.status);
+      const data = await response.json();
+      conversationId = data.conversation_id;
+      removeThinkingIndicator();
+      addBotMessage(data.reply);
+      currentCoachMatches = data.coach_matches || [];
+    } catch (err) {
+      removeThinkingIndicator();
+      addErrorNote("Couldn't complete that selection just now — please try again.");
+      console.error(err);
+    }
+  });
+
+  // Event delegation: works for both dynamically-created card divs and SVG
+  // graph nodes without needing an individual listener attached to each one.
+  messagesEl.addEventListener('click', (e) => {
+    const target = e.target.closest('.coach-clickable, .coach-node-clickable');
+    if (!target) return;
+    const idx = parseInt(target.getAttribute('data-coach-index'), 10);
+    if (!isNaN(idx) && currentCoachMatches[idx]) {
+      openCoachDetail(currentCoachMatches[idx]);
+    }
+  });
+
+  sendBtn.addEventListener('click', sendMessage);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+  input.addEventListener('input', () => {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 100) + 'px';
+  });
+</script>
+
+</body>
+</html>
