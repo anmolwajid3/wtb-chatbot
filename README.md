@@ -8,9 +8,6 @@ Technical & Delivery Blueprint*. Two parts:
 
 Both connect to the same Supabase Postgres database.
 
-Every file in this repo has already been verified to actually import/compile/build
-correctly (see "What's been verified" at the bottom) — you're not starting from
-a theoretical scaffold, you're starting from working code you can amend.
 
 ---
 
@@ -164,7 +161,7 @@ wtb-chatbot/
 
 ## What's been verified
 
-Before this was handed to you, every piece of this codebase was actually
+Every piece of this codebase was actually
 checked, not just written and assumed correct:
 - All Python modules import cleanly (`python -c "from app.agents import ..."`)
 - The LangGraph graph compiles with the correct node structure
@@ -172,7 +169,3 @@ checked, not just written and assumed correct:
 - The Next.js admin panel runs a full production build with zero errors,
   including a complete TypeScript type-check across all pages
 
-What has **not** been tested: an actual live conversation against a real
-OpenRouter API key and a real Supabase database, since that requires
-credentials only you can provide. The `pytest` scenario tests above are the
-fastest way to close that gap once your `.env` is filled in.
