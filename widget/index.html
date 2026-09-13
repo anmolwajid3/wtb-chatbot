@@ -625,17 +625,37 @@
 
   fullscreenBtn.addEventListener('click', toggleFullscreen);
 
+  const DEFAULT_GREETING = "Hi! Tell me a bit about what you're looking for — a theme, a situation, a team size, whatever comes to mind — and I'll help point you to the right coach.";
+
+async function showGreeting() {
+    let greetingText = DEFAULT_GREETING;
+    try {
+      const greetingUrl = API_URL.replace('/chat', '/greeting');
+      const response = await fetch(greetingUrl);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.greeting) {
+          greetingText = data.greeting;
+        }
+      }
+    } catch (err) {
+      // Network error or backend unreachable — fall back to the default
+      // text rather than showing nothing or breaking the widget.
+      console.error('Could not fetch a random greeting, using default', err);
+    }
+    addBotMessage(greetingText);
+  }
+
   function openPanel() {
     panel.classList.add('open');
     panel.setAttribute('aria-hidden', 'false');
     launcher.setAttribute('aria-expanded', 'true');
     launcher.style.display = 'none';
     if (messagesEl.children.length === 0) {
-      addBotMessage("Hi! Tell me a bit about what you're looking for — a theme, a situation, a team size, whatever comes to mind — and I'll help point you to the right coach.");
+      showGreeting();
     }
     input.focus();
   }
-
   function closePanel() {
     panel.classList.remove('open');
     panel.setAttribute('aria-hidden', 'true');

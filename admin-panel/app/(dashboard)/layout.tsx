@@ -10,6 +10,7 @@ const navLinks = [
   { href: "/queries", label: "Coach Support Queries" },
   { href: "/llm-settings", label: "LLM Settings" },
   { href: "/master-prompts", label: "Master Prompts" },
+  { href: "/greetings", label: "Opening Greetings" },
 ];
 
 

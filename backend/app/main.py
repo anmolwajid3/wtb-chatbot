@@ -38,6 +38,7 @@ class ChatResponse(BaseModel):
     debug_review_issues: list[str]
     debug_safety_loop_count: int
     debug_safety_fallback_used: bool
+    debug_off_topic_detected: bool
 
 
 @app.post("/chat", response_model=ChatResponse)
@@ -49,3 +50,8 @@ def chat(request: ChatRequest) -> ChatResponse:
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.get("/greeting")
+def greeting():
+    from app.db.connection import fetch_random_greeting
+    return {"greeting": fetch_random_greeting()}

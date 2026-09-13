@@ -1,15 +1,7 @@
 import { getPool } from "@/lib/db";
-import {
-  setActiveModel,
-  setMaxCap,
-  upsertPricing,
-  deletePricing,
-  resetUsageLog,
-} from "./actions";
+import { setActiveModel, setMaxCap, resetUsageLog } from "./actions";
 import ModelSwitcher from "./ModelSwitcher";
 import MaxCapForm from "./MaxCapForm";
-import PricingRow from "./PricingRow";
-import AddPricingForm from "./AddPricingForm";
 
 export const dynamic = "force-dynamic";
 
@@ -61,18 +53,13 @@ export default async function LlmSettingsPage() {
   const overCap = cap !== null && totalSpend >= cap;
   const nearCap = cap !== null && !overCap && totalSpend >= cap * 0.8;
 
-  const pricingResult = await pool.query(
-    `SELECT model, input_price_per_1m::float, output_price_per_1m::float FROM llm_pricing ORDER BY model`
-  );
-
   return (
     <div className="max-w-5xl mx-auto p-8">
       <h1 className="font-display text-2xl font-semibold text-amber-400 uppercase tracking-wide mb-2">
         LLM Settings
       </h1>
       <p className="text-sm text-neutral-400 mb-6">
-        Switch models, track spend, and manage pricing — all changes apply immediately, no
-        redeploy needed.
+        Switch models and track spend — all changes apply immediately, no redeploy needed.
       </p>
 
       <div
@@ -105,7 +92,7 @@ export default async function LlmSettingsPage() {
             ) : hasAnyRealCost ? (
               <span className="text-amber-400">⚠ Mix of real OpenRouter cost and estimated cost (some calls didn&apos;t return real cost data)</span>
             ) : (
-              <span className="text-neutral-500">⚠ Estimated only — real cost data from OpenRouter not available yet, using the pricing table below instead</span>
+              <span className="text-neutral-500">⚠ Estimated only — real cost data from OpenRouter not available yet</span>
             )}
           </p>
         )}
@@ -196,46 +183,8 @@ export default async function LlmSettingsPage() {
         </table>
       </div>
 
-      <div className="bg-neutral-900 border border-neutral-800 rounded-lg overflow-hidden mb-6">
-        <div className="flex items-center justify-between px-5 pt-4 pb-2">
-          <div>
-            <h3 className="font-medium text-neutral-100">Pricing (fallback only)</h3>
-            <p className="text-xs text-neutral-500">
-              Only used to estimate cost on the rare call where OpenRouter doesn&apos;t return a real
-              cost figure. Not needed for normal operation.
-            </p>
-          </div>
-          <AddPricingForm upsertPricing={upsertPricing} />
-        </div>
-        <table className="w-full text-sm">
-          <thead className="bg-black border-b border-neutral-800">
-            <tr>
-              <th className="text-left px-4 py-2 font-medium text-neutral-400 text-xs">Model</th>
-              <th className="text-left px-4 py-2 font-medium text-neutral-400 text-xs">Input $</th>
-              <th className="text-left px-4 py-2 font-medium text-neutral-400 text-xs">Output $</th>
-              <th className="text-left px-4 py-2 font-medium text-neutral-400 text-xs">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pricingResult.rows.map((p) => (
-              <PricingRow key={p.model} pricing={p} upsertPricing={upsertPricing} deletePricing={deletePricing} />
-            ))}
-            {pricingResult.rows.length === 0 && (
-              <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-neutral-600 text-xs">
-                  No pricing configured yet — usage will use a conservative default estimate.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
       <form action={resetUsageLog}>
-        <button
-          type="submit"
-          className="text-xs text-neutral-500 hover:text-red-400"
-        >
+        <button type="submit" className="text-xs text-neutral-500 hover:text-red-400">
           Clear all usage history (manual reset — no automatic monthly reset yet)
         </button>
       </form>

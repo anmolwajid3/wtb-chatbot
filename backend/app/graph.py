@@ -48,6 +48,7 @@ class ChatState(TypedDict):
     matched_coaches: list
     matched_coach_scores: dict
     coach_selected: bool
+    post_selection_turns: int
     outcome: str
     draft_reply: str
     guardrail_violated: bool
@@ -165,13 +166,13 @@ def get_compiled_graph():
 # Redis) if this were ever deployed multi-instance.
 _conversations_in_memory: dict[str, ChatState] = {}
 
-
 def _empty_debug_fields() -> dict:
     """Shared defaults for the debug_* fields on response paths that don't run the full graph."""
     return {
         "debug_turn_count": 0,
         "debug_gathered_slots": {},
         "debug_ready_to_match": False,
+        "debug_off_topic_detected": False,
         "debug_guardrail_violated": False,
         "debug_guardrail_which_rule": None,
         "debug_review_passed": True,
@@ -231,6 +232,7 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
     state["matched_coaches"] = [selected_coach_id]
     state["outcome"] = "matched"
     state["coach_selected"] = True
+    state["post_selection_turns"] = 0
 
     reply = (
         f"Great choice, {coach_name}'s {program_name} it is. "
@@ -261,24 +263,69 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
     }
 
 
+OPTIONAL_DETAILS_PROMPT_REPLY = (
+    "Perfect, thank you. Just a couple more quick details that'd help our team "
+    "prepare, if you have them handy: roughly how many people, what format works "
+    "best (in-person, remote, or hybrid), and any scheduling constraints we "
+    "should know about? No worries if you'd rather skip this and let the team "
+    "sort it out directly."
+)
+
+CLOSING_REPLY = (
+    "Thank you, that's everything I need. I'll get this over to WTB's team "
+    "right away, and they'll be in touch directly to confirm timing and next steps."
+)
+
+
 def _handle_post_selection_message(conversation_id: str, message: str) -> dict:
     """
-    Runs once a coach has already been explicitly selected (state["coach_selected"]
-    is True). Deliberately does NOT run intent_router/mood_tone/coach_matcher/
-    formatter — that full pipeline is what was silently overwriting the
-    customer's explicit choice with a fresh, unwanted re-match. Instead this
-    just records the message and runs the Summarizer to compile the final
-    brief, since a coach has already been decided.
+    Runs once a coach has already been explicitly selected. Deliberately does
+    NOT run intent_router/mood_tone/coach_matcher/formatter — that full
+    pipeline is what was silently overwriting the customer's explicit choice
+    with a fresh, unwanted re-match.
+
+    Two-step wrap-up instead of closing immediately after contact info:
+    round 1 (right after contact info is given) asks ONE consolidated,
+    explicitly-optional question about group size / format / scheduling —
+    details the brief always treated as optional to REQUIRE for matching,
+    but that are still genuinely useful for WTB's team to have, and this is
+    the natural moment to ask: after commitment, not before it. Round 2
+    (whatever they answer, including "skip") closes out and compiles the
+    final brief.
     """
     state = _conversations_in_memory[conversation_id]
     state["messages"].append({"role": "user", "content": message})
 
+    turns = state.get("post_selection_turns", 0)
+
+    if turns == 0:
+        state["post_selection_turns"] = 1
+        reply = OPTIONAL_DETAILS_PROMPT_REPLY
+        state["messages"].append({"role": "assistant", "content": reply})
+        _conversations_in_memory[conversation_id] = state
+
+        save_conversation_state(
+            conversation_id=conversation_id,
+            transcript=state["messages"],
+            outcome=state["outcome"],
+            matched_coach_ids=state.get("matched_coaches", []),
+            mood_history=state.get("mood_history", []),
+        )
+
+        return {
+            "conversation_id": conversation_id,
+            "reply": reply,
+            "outcome": state["outcome"],
+            "detected_mood": state.get("detected_mood", "neutral"),
+            "coach_matches": [],
+            **_empty_debug_fields(),
+        }
+
+    # turns >= 1: whatever they just said (real details, or "skip") is the
+    # last piece — compile the final brief now.
     result_state = run_summarizer(state)
 
-    reply = (
-        "Thank you, that's everything I need. I'll get this over to WTB's team "
-        "right away, and they'll be in touch directly to confirm timing and next steps."
-    )
+    reply = CLOSING_REPLY
     result_state["messages"].append({"role": "assistant", "content": reply})
     result_state["final_reply"] = reply
     _conversations_in_memory[conversation_id] = result_state
@@ -332,6 +379,7 @@ def run_turn(conversation_id: str | None, message: str, selected_coach_id: str |
             "matched_coaches": [],
             "matched_coach_scores": {},
             "coach_selected": False,
+            "post_selection_turns": 0,
             "outcome": "in_progress",
             "draft_reply": "",
             "guardrail_violated": False,
@@ -407,4 +455,5 @@ def run_turn(conversation_id: str | None, message: str, selected_coach_id: str |
         "debug_review_issues": result_state.get("review_issues", []),
         "debug_safety_loop_count": result_state.get("safety_loop_count", 0),
         "debug_safety_fallback_used": result_state.get("safety_fallback_used", False),
+         "debug_off_topic_detected": result_state.get("off_topic_this_turn", False),
     }

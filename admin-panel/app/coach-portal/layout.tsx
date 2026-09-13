@@ -12,7 +12,6 @@ async function coachLogoutAction() {
 
 const navLinks = [
   { href: "/coach-portal", label: "My Profile" },
-  { href: "/coach-portal/inquiries", label: "My Inquiries" },
   { href: "/coach-portal/support", label: "Support" },
 ];
 

@@ -21,6 +21,14 @@ class IntakeExtraction(BaseModel):
                     "real conversation. Never true for polite conversational closings, greetings, thank-yous, "
                     "or farewells (e.g. 'thanks', 'have a good day', 'bye') — these are normal and should pass through."
     )
+    is_off_topic: bool = Field(
+        default=False,
+        description="True if the latest message is a legitimate but unrelated personal aside — e.g. "
+                    "mentioning a personal event, a typo, small talk — that has nothing to do with the "
+                    "coaching conversation. This is DIFFERENT from spam: it's not malicious or promotional, "
+                    "just not relevant. False for anything even loosely connected to their team, work, or "
+                    "coaching need. Never true at the same time as is_spam.",
+    )
     theme: str | None = Field(default=None, description="The coaching theme/topic, e.g. 'leadership', 'crisis communication', 'team building'")
     timing: str | None = Field(
         default=None,
@@ -36,22 +44,27 @@ class IntakeExtraction(BaseModel):
     need_description: str | None = Field(default=None, description="A free-text summary of what the visitor is looking for")
 
 
-
-
 INTAKE_SYSTEM_PROMPT_DEFAULT = """You are the intake-parsing component of a coaching-company chatbot. Your ONLY job is structured extraction — you do not write any reply to the user. Extract what you can from the latest message. Do not invent information that wasn't stated. Leave fields null if not mentioned. Budget and group size are optional signals the visitor may or may not share unprompted — never treat their absence as a problem.
 
 Only mark is_spam=true for genuinely abusive, promotional, or malicious content.
 Do NOT mark polite closings, greetings, thank-yous, or farewells as spam, even
 though they don't mention coaching — these are a normal, expected part of
-finishing a conversation."""
+finishing a conversation.
+
+Actively check for is_off_topic=true: this applies whenever the latest message
+is a genuine personal aside unrelated to coaching — mentioning a personal loss,
+an unrelated life event, or anything purely conversational rather than about
+their team or work situation. This is common and expected; do not default to
+false just because the message isn't spam. Example: "my cat died" should be
+marked is_off_topic=true, not treated as a normal coaching-related message."""
 
 
 def run_intent_router(state: dict) -> dict:
     state["outcome"] = "in_progress"  # reset each turn — don't let a prior turn's outcome (e.g. "spam") stick around
     state["safety_loop_count"] = 0
     state["safety_fallback_used"] = False
+    state["off_topic_this_turn"] = False
 
-    #llm = get_llm(temperature=0.0)
     llm = get_llm(temperature=0.0, agent_name="intent_router")
     structured_llm = llm.with_structured_output(IntakeExtraction)
 
@@ -67,6 +80,8 @@ def run_intent_router(state: dict) -> dict:
     if result.is_spam:
         state["outcome"] = "spam"
         return state
+
+    state["off_topic_this_turn"] = result.is_off_topic
 
     # Merge without overwriting already-known fields
     slots = state.get("gathered_slots", {})
@@ -85,8 +100,6 @@ def run_intent_router(state: dict) -> dict:
 
     state["gathered_slots"] = slots
     state["turn_count"] = state.get("turn_count", 0) + 1
-
-
 
     # Warm-up rule: never recommend on the very first message. Require at
     # least one prior turn AND the core fields — theme, need_description,

@@ -213,3 +213,28 @@ def reset_agent_prompt(agent_name: str) -> None:
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM agent_prompts WHERE agent_name = %s", (agent_name,))
+DEFAULT_GREETING = (
+    "Hi! Tell me a bit about what you're looking for a theme, a situation, "
+    "a team size, whatever comes to mind and I'll help point you to the right coach."
+)
+
+
+def fetch_random_greeting() -> str:
+    """
+    Picks one random active greeting for a fresh conversation. Falls back to
+    the original hardcoded default if the table is empty, has no active
+    rows, or the database is unreachable — the widget should never show
+    nothing, or an error, where a greeting is expected.
+    """
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT greeting_text FROM opening_greetings WHERE is_active = true ORDER BY random() LIMIT 1"
+                )
+                row = cur.fetchone()
+                if row and row["greeting_text"]:
+                    return row["greeting_text"]
+    except Exception:
+        pass
+    return DEFAULT_GREETING
