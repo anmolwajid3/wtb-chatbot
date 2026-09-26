@@ -1,18 +1,19 @@
 import { getPool } from "@/lib/db";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { getWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
 type TranscriptMessage = { role: string; content: string };
 type MoodEntry = { turn: number; mood: string };
 
-async function getConversation(id: string) {
+async function getConversation(id: string, organizationId: string) {
   const pool = getPool();
   const result = await pool.query(
     `SELECT id, started_at, transcript_json, outcome, matched_coach_ids, mood_history
-     FROM conversations WHERE id = $1`,
-    [id]
+     FROM conversations WHERE id = $1 AND organization_id = $2`,
+    [id, organizationId]
   );
   return result.rows[0] || null;
 }
@@ -34,13 +35,12 @@ async function getQuoteRequest(conversationId: string) {
   return result.rows[0] || null;
 }
 
-const outcomeStyles: Record<string, string> = {
-  matched: "bg-green-900/40 text-green-400",
-  purchase_order: "bg-amber-900/40 text-amber-400",
-  spam: "bg-neutral-800 text-neutral-500",
-  abandoned: "bg-neutral-800 text-neutral-500",
-  in_progress: "bg-blue-900/40 text-blue-400",
-};
+function outcomeTag(outcome: string) {
+  if (outcome === "matched") return "tag tag-matched";
+  if (outcome === "purchase_order") return "tag tag-order";
+  if (outcome === "in_progress") return "tag tag-progress";
+  return "tag tag-muted";
+}
 
 type StructuredSummary = {
   need_summary: string;
@@ -96,7 +96,9 @@ function renderQuoteSummary(summaryText: string) {
 
 export default async function ConversationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const conversation = await getConversation(id);
+  const workspace = await getWorkspace();
+  if (!workspace?.organization) return notFound();
+  const conversation = await getConversation(id, workspace.organization.id);
   if (!conversation) return notFound();
 
   const coaches = await getCoachNames(conversation.matched_coach_ids || []);
@@ -114,11 +116,7 @@ export default async function ConversationDetailPage({ params }: { params: Promi
         <h1 className="font-display text-2xl font-semibold text-amber-400 uppercase tracking-wide">
           Conversation
         </h1>
-        <span
-          className={`text-xs px-2 py-1 rounded-full ${
-            outcomeStyles[conversation.outcome] || "bg-neutral-800 text-neutral-500"
-          }`}
-        >
+        <span className={outcomeTag(conversation.outcome)}>
           {conversation.outcome.replace(/_/g, " ")}
         </span>
       </div>

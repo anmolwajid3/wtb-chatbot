@@ -24,9 +24,10 @@ class UsageLoggingHandler(BaseCallbackHandler):
     silently falls back to the estimate rather than losing data entirely.
     """
 
-    def __init__(self, agent_name: str, model: str):
+    def __init__(self, agent_name: str, model: str, organization_id: str | None = None):
         self.agent_name = agent_name
         self.model = model
+        self.organization_id = organization_id
 
     def on_llm_end(self, response, **kwargs):
         try:
@@ -40,17 +41,17 @@ class UsageLoggingHandler(BaseCallbackHandler):
 
             real_cost = usage.get("cost")  # OpenRouter-specific: actual dollars for this exact call
             if real_cost is not None:
-                log_llm_usage(self.agent_name, self.model, input_tokens, output_tokens, float(real_cost), is_actual=True)
+                log_llm_usage(self.agent_name, self.model, input_tokens, output_tokens, float(real_cost), is_actual=True, organization_id=self.organization_id)
             else:
                 price = get_llm_pricing(self.model)
                 estimated_cost = (input_tokens / 1_000_000) * price["input"] + (output_tokens / 1_000_000) * price["output"]
-                log_llm_usage(self.agent_name, self.model, input_tokens, output_tokens, estimated_cost, is_actual=False)
+                log_llm_usage(self.agent_name, self.model, input_tokens, output_tokens, estimated_cost, is_actual=False, organization_id=self.organization_id)
         except Exception:
             # Usage logging must never be able to break the actual chatbot request.
             pass
 
 
-def get_llm(temperature: float = 0.0, agent_name: str = "unknown") -> ChatOpenAI:
+def get_llm(temperature: float = 0.0, agent_name: str = "unknown", organization_id: str | None = None) -> ChatOpenAI:
     """
     Returns a configured chat client pointed at OpenRouter.
 
@@ -65,7 +66,7 @@ def get_llm(temperature: float = 0.0, agent_name: str = "unknown") -> ChatOpenAI
     """
     api_key = os.environ.get("OPENROUTER_API_KEY")
     base_url = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-    model = get_active_model()
+    model = get_active_model(organization_id)
 
     if not api_key:
         raise RuntimeError(
@@ -73,7 +74,7 @@ def get_llm(temperature: float = 0.0, agent_name: str = "unknown") -> ChatOpenAI
             "Copy .env.example to .env and fill in real values."
         )
 
-    handler = UsageLoggingHandler(agent_name, model)
+    handler = UsageLoggingHandler(agent_name, model, organization_id)
 
     return ChatOpenAI(
         api_key=api_key,

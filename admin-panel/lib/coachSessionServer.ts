@@ -1,11 +1,11 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getPool } from "@/lib/db";
-import { verifyCoachSessionToken } from "./coachSession";
+import { verifyCoachSessionToken, COACH_SESSION_COOKIE } from "./coachSession";
 
 export async function getVerifiedCoachSession() {
   const cookieStore = await cookies();
-  const token = cookieStore.get("wtb_coach_session")?.value;
+  const token = cookieStore.get(COACH_SESSION_COOKIE)?.value;
   return verifyCoachSessionToken(token);
 }
 

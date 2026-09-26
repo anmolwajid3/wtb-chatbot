@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getPool } from "@/lib/db";
+import { getWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -11,33 +12,44 @@ type ConversationRow = {
   has_quote_request: boolean;
 };
 
-async function getConversations(): Promise<ConversationRow[]> {
+async function getConversations(organizationId: string): Promise<ConversationRow[]> {
   const pool = getPool();
-  const result = await pool.query(`
-    SELECT c.id, c.started_at, c.outcome, c.matched_coach_ids,
-           (qr.id IS NOT NULL) AS has_quote_request
-    FROM conversations c
-    LEFT JOIN quote_requests qr ON qr.conversation_id = c.id
-    ORDER BY c.started_at DESC
-    LIMIT 200
-  `);
+  const result = await pool.query(
+    `SELECT c.id, c.started_at, c.outcome, c.matched_coach_ids,
+            (qr.id IS NOT NULL) AS has_quote_request
+     FROM conversations c
+     LEFT JOIN quote_requests qr ON qr.conversation_id = c.id
+     WHERE c.organization_id = $1
+     ORDER BY c.started_at DESC
+     LIMIT 200`,
+    [organizationId]
+  );
   return result.rows;
 }
 
-const outcomeStyles: Record<string, string> = {
-  matched: "bg-green-900/40 text-green-400",
-  purchase_order: "bg-amber-900/40 text-amber-400",
-  spam: "bg-neutral-800 text-neutral-500",
-  abandoned: "bg-neutral-800 text-neutral-500",
-  in_progress: "bg-blue-900/40 text-blue-400",
-};
+function outcomeTag(outcome: string) {
+  if (outcome === "matched") return "tag tag-matched";
+  if (outcome === "purchase_order") return "tag tag-order";
+  if (outcome === "in_progress") return "tag tag-progress";
+  return "tag tag-muted";
+}
 
 function formatOutcome(outcome: string) {
   return outcome.replace(/_/g, " ");
 }
 
 export default async function LogsPage() {
-  const conversations = await getConversations();
+  const workspace = await getWorkspace();
+  const organizationId = workspace?.organization?.id;
+  if (!organizationId) {
+    return (
+      <div className="max-w-3xl mx-auto p-8">
+        <h1 className="font-display text-2xl text-neutral-100 mb-2">Conversation logs</h1>
+        <p className="text-sm text-neutral-400">Open a company to see its conversations. Logs are kept per company.</p>
+      </div>
+    );
+  }
+  const conversations = await getConversations(organizationId);
 
   return (
     <div className="max-w-5xl mx-auto p-8">
@@ -68,11 +80,7 @@ export default async function LogsPage() {
                   
                 </td>
                 <td className="px-4 py-3">
-                  <span
-                    className={`text-xs px-2 py-1 rounded-full ${
-                      outcomeStyles[c.outcome] || "bg-neutral-800 text-neutral-500"
-                    }`}
-                  >
+                  <span className={outcomeTag(c.outcome)}>
                     {formatOutcome(c.outcome)}
                   </span>
                 </td>

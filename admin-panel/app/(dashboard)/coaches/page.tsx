@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { getPool } from "@/lib/db";
+import { getLocale, t } from "@/lib/i18n";
+import { listProfileFields, requireOrganization } from "@/lib/workspace";
 import { toggleCoachActive } from "./actions";
 import SafeImage from "./SafeImage";
 
@@ -15,29 +17,36 @@ type Coach = {
   image_urls: string[] | null;
 };
 
-async function getCoaches(): Promise<Coach[]> {
+async function getCoaches(organizationId: string | null): Promise<Coach[]> {
   const pool = getPool();
-  const result = await pool.query(
-    `SELECT id, coach_name, program_name, main_category, is_active, is_synthetic, image_urls
-     FROM coaches ORDER BY coach_name ASC`
-  );
+  const sql = `SELECT id, coach_name, program_name, main_category, is_active, is_synthetic, image_urls
+     FROM coaches`;
+  const result = organizationId
+    ? await pool.query(`${sql} WHERE organization_id = $1 ORDER BY coach_name ASC`, [organizationId])
+    : await pool.query(`${sql} ORDER BY coach_name ASC`);
   return result.rows;
 }
 
 export default async function CoachesPage() {
-  const coaches = await getCoaches();
+  const { organization } = await requireOrganization();
+  const locale = await getLocale();
+  const label = organization.profile_label;
+  const labelPlural = organization.profile_label_plural;
+  const coaches = await getCoaches(organization.id);
+  const fields = await listProfileFields(organization.id);
+  const ready = fields.length > 0;
 
   return (
     <div className="max-w-5xl mx-auto p-8">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="font-display text-2xl font-semibold text-amber-400 uppercase tracking-wide">
-          Coach Profiles
+        <h1 className="font-display text-2xl text-neutral-100">
+          {labelPlural}
         </h1>
         <Link
-          href="/coaches/new"
+          href={ready ? "/coaches/new" : "/profile-structure"}
           className="bg-amber-500 text-black font-medium px-4 py-2 rounded-md hover:bg-amber-400 transition"
         >
-          + Add new coach
+          + {ready ? label : t(locale, "nav.fields")}
         </Link>
       </div>
 
@@ -82,13 +91,7 @@ export default async function CoachesPage() {
                   <td className="px-4 py-3 text-neutral-400">{coach.program_name}</td>
                   <td className="px-4 py-3 text-neutral-400">{coach.main_category}</td>
                   <td className="px-4 py-3">
-                    <span
-                      className={`text-xs px-2 py-1 rounded-full ${
-                        coach.is_active
-                          ? "bg-green-900/40 text-green-400"
-                          : "bg-neutral-800 text-neutral-500"
-                      }`}
-                    >
+                    <span className={`tag ${coach.is_active ? "tag-active" : "tag-muted"}`}>
                       {coach.is_active ? "Active" : "Inactive"}
                     </span>
                   </td>
@@ -110,7 +113,9 @@ export default async function CoachesPage() {
             {coaches.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-neutral-600">
-                  No coaches yet — add your first one to get started.
+                  {ready
+                    ? t(locale, "fields.emptyList", { people: labelPlural })
+                    : t(locale, "fields.setup", { person: label })}
                 </td>
               </tr>
             )}

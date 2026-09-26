@@ -1,4 +1,7 @@
 import { getPool } from "@/lib/db";
+import { assertStaff, canEditCompany } from "@/lib/plans";
+import { getWorkspace, requireOrganization } from "@/lib/workspace";
+import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import PhraseItem from "./PhraseItem";
 
@@ -6,29 +9,37 @@ export const dynamic = "force-dynamic";
 
 type Phrase = { id: string; situation_type: string; phrase_text: string; is_active: boolean };
 
-async function getPhrases(): Promise<Phrase[]> {
+async function getPhrases(organizationId: string | null): Promise<Phrase[]> {
   const pool = getPool();
-  const result = await pool.query(
-    `SELECT * FROM example_phrases ORDER BY situation_type, phrase_text`
-  );
+  const result = organizationId
+    ? await pool.query(
+        `SELECT * FROM example_phrases WHERE organization_id = $1 ORDER BY situation_type, phrase_text`,
+        [organizationId]
+      )
+    : await pool.query(
+        `SELECT * FROM example_phrases WHERE organization_id IS NULL ORDER BY situation_type, phrase_text`
+      );
   return result.rows;
 }
 
 async function addPhrase(formData: FormData) {
   "use server";
+  await assertStaff(canEditCompany);
   const situation_type = formData.get("situation_type") as string;
   const phrase_text = formData.get("phrase_text") as string;
   if (!phrase_text?.trim()) return;
+  const workspace = await getWorkspace();
   const pool = getPool();
   await pool.query(
-    `INSERT INTO example_phrases (situation_type, phrase_text) VALUES ($1, $2)`,
-    [situation_type, phrase_text]
+    `INSERT INTO example_phrases (situation_type, phrase_text, organization_id) VALUES ($1, $2, $3)`,
+    [situation_type, phrase_text, workspace?.organization?.id ?? null]
   );
   revalidatePath("/phrases");
 }
 
 async function updatePhrase(id: string, phrase_text: string) {
   "use server";
+  await assertStaff(canEditCompany);
   if (!phrase_text?.trim()) return;
   const pool = getPool();
   await pool.query(`UPDATE example_phrases SET phrase_text = $1 WHERE id = $2`, [
@@ -40,6 +51,7 @@ async function updatePhrase(id: string, phrase_text: string) {
 
 async function deletePhrase(id: string) {
   "use server";
+  await assertStaff(canEditCompany);
   const pool = getPool();
   await pool.query(`DELETE FROM example_phrases WHERE id = $1`, [id]);
   revalidatePath("/phrases");
@@ -87,7 +99,9 @@ function MoodColumn({
 }
 
 export default async function PhrasesPage() {
-  const phrases = await getPhrases();
+  const { session, organization } = await requireOrganization();
+  if (!canEditCompany(session.role)) redirect("/home");
+  const phrases = await getPhrases(organization.id);
 
   return (
     <div className="max-w-6xl mx-auto p-8">
@@ -95,7 +109,7 @@ export default async function PhrasesPage() {
         Example Phrases
       </h1>
       <p className="text-sm text-neutral-400 mb-6">
-        These seed the bot&apos;s phrasing for each detected customer mood. The bot re-assesses
+        These belong to {organization.name}. They seed phrasing for each detected mood. The bot re-assesses
         mood on every turn — these phrases guide tone, they aren&apos;t copied verbatim every time.
         Click the pencil on any phrase to edit it in place.
       </p>

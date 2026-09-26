@@ -3,6 +3,8 @@ import crypto from "crypto";
 // Falls back to ADMIN_PANEL_PASSWORD if SESSION_SECRET isn't set, so this
 // doesn't hard-break existing setups — but a dedicated SESSION_SECRET is
 // recommended once real coach accounts are in use.
+export const COACH_SESSION_COOKIE = "harbor_coach_session";
+
 const SECRET = process.env.SESSION_SECRET || process.env.ADMIN_PANEL_PASSWORD || "dev-secret-change-me";
 
 type CoachSessionPayload = {

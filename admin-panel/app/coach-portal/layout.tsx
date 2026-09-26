@@ -1,23 +1,25 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { verifyCoachSessionToken } from "@/lib/coachSession";
+import { verifyCoachSessionToken, COACH_SESSION_COOKIE } from "@/lib/coachSession";
+import { HarborMark } from "../components/HarborMark";
 
 async function coachLogoutAction() {
   "use server";
   const cookieStore = await cookies();
-  cookieStore.delete("wtb_coach_session");
+  cookieStore.delete(COACH_SESSION_COOKIE);
   redirect("/coach-login");
 }
 
 const navLinks = [
   { href: "/coach-portal", label: "My Profile" },
+  { href: "/coach-portal/messages", label: "Messages" },
   { href: "/coach-portal/support", label: "Support" },
 ];
 
 export default async function CoachPortalLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
-  const token = cookieStore.get("wtb_coach_session")?.value;
+  const token = cookieStore.get(COACH_SESSION_COOKIE)?.value;
   const session = verifyCoachSessionToken(token);
 
   if (!session) {
@@ -26,10 +28,10 @@ export default async function CoachPortalLayout({ children }: { children: React.
 
   return (
     <div className="flex min-h-screen">
-      <aside className="w-60 shrink-0 bg-black border-r border-neutral-800 flex flex-col justify-between p-5">
+      <aside className="aside-shell w-60 shrink-0 flex flex-col justify-between p-5">
         <div>
-          <div className="font-display font-semibold text-amber-400 uppercase tracking-wide text-sm mb-1">
-            WTB Coach Portal
+          <div className="mb-4">
+            <HarborMark onDark />
           </div>
           <p className="text-xs text-neutral-500 mb-8">{session.coachName}</p>
           <nav className="flex flex-col gap-1">

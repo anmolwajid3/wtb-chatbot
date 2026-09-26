@@ -1,4 +1,5 @@
 import { getPool } from "@/lib/db";
+import { getWorkspace } from "@/lib/workspace";
 import QueryRow from "./QueryRow";
 import { updateQuery, deleteQuery } from "./actions";
 
@@ -11,11 +12,26 @@ export default async function QueriesPage({
 }) {
   const params = await searchParams;
   const coachFilter = params.coach || "";
+  const workspace = await getWorkspace();
+  const organizationId = workspace?.organization?.id;
+  if (!organizationId) {
+    return (
+      <div className="max-w-3xl mx-auto p-8">
+        <h1 className="font-display text-2xl text-neutral-100 mb-2">Inbox</h1>
+        <p className="text-sm text-neutral-400">Open a company to see messages from its profiles.</p>
+      </div>
+    );
+  }
 
   const pool = getPool();
 
   const statsResult = await pool.query(
-    `SELECT status, count(*)::int AS count FROM coach_queries GROUP BY status`
+    `SELECT q.status, count(*)::int AS count
+     FROM coach_queries q
+     JOIN coaches c ON c.id = q.coach_id
+     WHERE c.organization_id = $1
+     GROUP BY q.status`,
+    [organizationId]
   );
   const stats = { open: 0, pending: 0, closed: 0 };
   for (const row of statsResult.rows) {
@@ -27,14 +43,16 @@ export default async function QueriesPage({
   const coachListResult = await pool.query(
     `SELECT DISTINCT c.id, c.coach_name
      FROM coaches c JOIN coach_queries q ON q.coach_id = c.id
-     ORDER BY c.coach_name`
+     WHERE c.organization_id = $1
+     ORDER BY c.coach_name`,
+    [organizationId]
   );
 
-  const queryParams: string[] = [];
-  let whereClause = "";
+  const queryParams: string[] = [organizationId];
+  let whereClause = "WHERE c.organization_id = $1";
   if (coachFilter) {
-    whereClause = "WHERE q.coach_id = $1";
     queryParams.push(coachFilter);
+    whereClause += ` AND q.coach_id = $${queryParams.length}`;
   }
 
   const result = await pool.query(

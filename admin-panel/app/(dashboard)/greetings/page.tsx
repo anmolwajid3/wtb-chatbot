@@ -1,4 +1,7 @@
 import { getPool } from "@/lib/db";
+import { canEditCompany } from "@/lib/plans";
+import { requireOrganization } from "@/lib/workspace";
+import { redirect } from "next/navigation";
 import { addGreeting, updateGreeting, toggleGreeting, deleteGreeting } from "./actions";
 import GreetingRow from "./GreetingRow";
 import AddGreetingForm from "./AddGreetingForm";
@@ -8,8 +11,18 @@ export const dynamic = "force-dynamic";
 type Greeting = { id: string; greeting_text: string; is_active: boolean };
 
 export default async function GreetingsPage() {
+  const { session, organization } = await requireOrganization();
+  if (!canEditCompany(session.role)) redirect("/home");
+  const organizationId = organization.id;
   const pool = getPool();
-  const result = await pool.query(`SELECT id, greeting_text, is_active FROM opening_greetings ORDER BY created_at`);
+  const result = organizationId
+    ? await pool.query(
+        `SELECT id, greeting_text, is_active FROM opening_greetings WHERE organization_id = $1 ORDER BY created_at`,
+        [organizationId]
+      )
+    : await pool.query(
+        `SELECT id, greeting_text, is_active FROM opening_greetings WHERE organization_id IS NULL ORDER BY created_at`
+      );
   const greetings: Greeting[] = result.rows;
 
   return (
@@ -21,8 +34,8 @@ export default async function GreetingsPage() {
         <AddGreetingForm addGreeting={addGreeting} />
       </div>
       <p className="text-sm text-neutral-400 mb-6">
-        Add as many variations as you like — a random active one is shown each time a visitor
-        opens the chat, instead of always the same line.
+        These are {organization.name}&apos;s opening lines. A random active one is shown each time a visitor
+        opens this company&apos;s chat.
       </p>
 
       <div className="bg-neutral-900 rounded-lg border border-neutral-800 overflow-hidden">

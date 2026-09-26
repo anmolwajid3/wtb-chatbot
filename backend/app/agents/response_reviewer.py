@@ -56,6 +56,13 @@ def run_response_reviewer(state: dict) -> dict:
     if not reply:
         return state
 
+    # The revision from the previous round already cleared the guardrail.
+    # Another quality pass would keep rewriting it until the safety cap
+    # threw the match away.
+    if state.get("safety_loop_count", 0) >= 2 and not state.get("guardrail_violated"):
+        state["review_passed"] = True
+        return state
+
     tone_guidance = state.get("tone_guidance", {})
     base_tone = tone_guidance.get("base_tone", "Warm and professional.")
     mood = state.get("detected_mood", "neutral")
@@ -64,10 +71,10 @@ def run_response_reviewer(state: dict) -> dict:
     coaches = fetch_coaches_by_ids(matched_ids) if matched_ids else []
 
     #llm = get_llm(temperature=0.0)
-    llm = get_llm(temperature=0.0, agent_name="response_reviewer")
+    llm = get_llm(temperature=0.0, agent_name="response_reviewer", organization_id=state.get("organization_id"))
     structured_llm = llm.with_structured_output(ResponseReview)
 
-    prompt_template = get_agent_prompt("response_reviewer", REVIEW_SYSTEM_PROMPT_DEFAULT)
+    prompt_template = get_agent_prompt("response_reviewer", REVIEW_SYSTEM_PROMPT_DEFAULT, state.get("organization_id"))
     try:
         prompt = prompt_template.format(base_tone=base_tone, mood=mood, coaches=coaches, reply=reply)
     except (KeyError, IndexError):

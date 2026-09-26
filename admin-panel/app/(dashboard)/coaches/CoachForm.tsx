@@ -1,3 +1,6 @@
+import Link from "next/link";
+import { sectionForField } from "@/lib/profileSections";
+import { getWorkspace, listProfileFields, listProfileSections, type ProfileField } from "@/lib/workspace";
 import { saveCoach, uploadCoachImage, removeCoachImage, setCoachAccountCredentials, getCoachAccountUsername } from "./actions";
 import CoachImageUploader from "./CoachImageUploader";
 import CoachAccountManager from "./CoachAccountManager";
@@ -22,12 +25,13 @@ function Section({ title, note, children }: { title: string; note?: string; chil
   );
 }
 
-function Field({ label, name, defaultValue, textarea = false, type = "text" }: {
+function Field({ label, name, defaultValue, textarea = false, type = "text", required = false }: {
   label: string;
   name: string;
   defaultValue: string;
   textarea?: boolean;
   type?: string;
+  required?: boolean;
 }) {
   return (
     <label className="block">
@@ -36,6 +40,7 @@ function Field({ label, name, defaultValue, textarea = false, type = "text" }: {
         <textarea
           name={name}
           defaultValue={defaultValue}
+          required={required}
           rows={3}
           className="mt-1 w-full bg-black border border-neutral-700 rounded-md px-3 py-2 text-sm text-neutral-100 focus:outline-none focus:border-amber-500"
         />
@@ -44,6 +49,7 @@ function Field({ label, name, defaultValue, textarea = false, type = "text" }: {
           type={type}
           name={name}
           defaultValue={defaultValue}
+          required={required}
           className="mt-1 w-full bg-black border border-neutral-700 rounded-md px-3 py-2 text-sm text-neutral-100 focus:outline-none focus:border-amber-500"
         />
       )}
@@ -51,7 +57,158 @@ function Field({ label, name, defaultValue, textarea = false, type = "text" }: {
   );
 }
 
+function ExtraFields({
+  title,
+  fields,
+  saved,
+}: {
+  title: string;
+  fields: ProfileField[];
+  saved: Record<string, unknown>;
+}) {
+  const rows = fields.filter(
+    (field) => field.group_name === title || sectionForField(field.group_name) === title
+  );
+  return rows.map((field) => {
+    const current = saved[field.field_key] == null ? "" : String(saved[field.field_key]);
+    const name = `cf_${field.field_key}`;
+    const label = `${field.label}${field.required ? " *" : ""}`;
+    if (field.field_type === "radio") {
+      return (
+        <fieldset key={field.id} className="block">
+          <legend className="text-sm text-neutral-400">{label}</legend>
+          <div className="mt-2 flex flex-col gap-1">
+            {(field.options || []).map((option) => (
+              <label key={option} className="flex items-center gap-2 text-sm text-neutral-200">
+                <input type="radio" name={name} value={option} defaultChecked={current === option} required={field.required} />
+                {option}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      );
+    }
+    if (field.field_type === "dropdown") {
+      return (
+        <label key={field.id} className="block">
+          <span className="text-sm text-neutral-400">{label}</span>
+          <select
+            name={name}
+            defaultValue={current}
+            required={field.required}
+            className="mt-1 w-full bg-black border border-neutral-700 rounded-md px-3 py-2 text-sm text-neutral-100 focus:outline-none focus:border-amber-500"
+          >
+            <option value=""></option>
+            {(field.options || []).map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+      );
+    }
+    return (
+      <Field
+        key={field.id}
+        label={label}
+        name={name}
+        defaultValue={current}
+        textarea={field.field_type === "textarea"}
+        type={field.field_type === "number" ? "number" : "text"}
+        required={field.required}
+      />
+    );
+  });
+}
+
+function CustomProfileForm({
+  coach,
+  fields,
+  sections,
+  label,
+  plural,
+}: {
+  coach: CoachRecord;
+  fields: ProfileField[];
+  sections: string[];
+  label: string;
+  plural: string;
+}) {
+  const saved =
+    coach?.custom_fields && typeof coach.custom_fields === "object"
+      ? (coach.custom_fields as Record<string, unknown>)
+      : {};
+  if (fields.length === 0) {
+    return (
+      <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-6">
+        <p className="text-neutral-300 mb-4">Create sections and fields before adding a {label.toLowerCase()}.</p>
+        <Link href="/profile-structure" className="text-amber-400 hover:underline">
+          Set up fields
+        </Link>
+      </div>
+    );
+  }
+  const ordered = [...sections];
+  for (const field of fields) {
+    if (field.group_name && !ordered.includes(field.group_name)) ordered.push(field.group_name);
+  }
+  const firstId = fields[0]?.id;
+  return (
+    <form action={saveCoach} className="max-w-4xl">
+      {coach && <input type="hidden" name="id" value={String(coach.id)} />}
+      {ordered.map((title) => {
+        const rows = fields.filter((field) => field.group_name === title);
+        if (rows.length === 0) return null;
+        return (
+          <Section key={title} title={title}>
+            {rows.map((field) => {
+              const shown = field.id === firstId ? { ...field, required: true } : field;
+              return (
+                <div key={field.id}>
+                  {field.id === firstId && (
+                    <p className="text-xs text-neutral-500 mb-1">This is the name shown in the list.</p>
+                  )}
+                  <ExtraFields title={title} fields={[shown]} saved={saved} />
+                </div>
+              );
+            })}
+          </Section>
+        );
+      })}
+      <div className="flex gap-3 mt-6 items-center">
+        <button type="submit" className="bg-amber-500 text-black font-medium px-5 py-2.5 rounded-md hover:bg-amber-400 transition">
+          Save {label.toLowerCase()}
+        </button>
+        <Link href="/coaches" className="text-sm text-neutral-400 hover:text-amber-400 px-3 py-2">
+          Back to {plural}
+        </Link>
+      </div>
+    </form>
+  );
+}
+
 export default async function CoachForm({ coach }: { coach: CoachRecord }) {
+  const workspace = await getWorkspace();
+  const allFields = workspace?.organization ? await listProfileFields(workspace.organization.id) : [];
+  const hasBuiltin = allFields.some((field) => field.is_builtin);
+  if (!hasBuiltin) {
+    const sections = workspace?.organization ? await listProfileSections(workspace.organization.id) : [];
+    return (
+      <CustomProfileForm
+        coach={coach}
+        fields={allFields}
+        sections={sections.map((section) => section.title)}
+        label={workspace?.organization?.profile_label || "profile"}
+        plural={workspace?.organization?.profile_label_plural || "list"}
+      />
+    );
+  }
+  const customFields = allFields.filter((field) => !field.is_builtin);
+  const savedCustom =
+    coach?.custom_fields && typeof coach.custom_fields === "object"
+      ? (coach.custom_fields as Record<string, unknown>)
+      : {};
   const currentImages: string[] = Array.isArray(coach?.image_urls)
     ? (coach.image_urls as string[])
     : [];
@@ -70,12 +227,14 @@ export default async function CoachForm({ coach }: { coach: CoachRecord }) {
         <Field label="Phone" name="phone" defaultValue={val(coach, "phone")} />
         <Field label="Website / LinkedIn" name="website_or_linkedin" defaultValue={val(coach, "website_or_linkedin")} />
         <Field label="Operating area" name="operating_area" defaultValue={val(coach, "operating_area")} />
+        <ExtraFields title="1. Basic Info" fields={customFields} saved={savedCustom} />
       </Section>
 
       <Section title="2. Service Basic Info">
         <Field label="Program name" name="program_name" defaultValue={val(coach, "program_name")} />
         <Field label="Short description" name="short_description" defaultValue={val(coach, "short_description")} textarea />
         <Field label="Long description" name="long_description" defaultValue={val(coach, "long_description")} textarea />
+        <ExtraFields title="2. Service Basic Info" fields={customFields} saved={savedCustom} />
       </Section>
 
       <Section title="3. Target Group & Situation">
@@ -85,12 +244,14 @@ export default async function CoachForm({ coach }: { coach: CoachRecord }) {
           name="suited_situations"
           defaultValue={val(coach, "suited_situations")}
         />
+        <ExtraFields title="3. Target Group & Situation" fields={customFields} saved={savedCustom} />
       </Section>
 
       <Section title="4. Content & Themes">
         <Field label="Key themes (comma-separated)" name="key_themes" defaultValue={val(coach, "key_themes")} />
         <Field label="Participant activities" name="participant_activities" defaultValue={val(coach, "participant_activities")} textarea />
         <Field label="Methods (comma-separated)" name="methods" defaultValue={val(coach, "methods")} />
+        <ExtraFields title="4. Content & Themes" fields={customFields} saved={savedCustom} />
       </Section>
 
       <Section title="5. Delivery Model">
@@ -100,12 +261,14 @@ export default async function CoachForm({ coach }: { coach: CoachRecord }) {
         <Field label="Group size max" name="group_size_max" defaultValue={val(coach, "group_size_max")} type="number" />
         <Field label="Duration" name="duration" defaultValue={val(coach, "duration")} />
         <Field label="Program structure" name="program_structure" defaultValue={val(coach, "program_structure")} textarea />
+        <ExtraFields title="5. Delivery Model" fields={customFields} saved={savedCustom} />
       </Section>
 
       <Section title="6. Goals & Outcomes">
         <Field label="Goals" name="goals" defaultValue={val(coach, "goals")} textarea />
         <Field label="Impact measurement" name="impact_measurement" defaultValue={val(coach, "impact_measurement")} textarea />
         <Field label="Change achieved" name="change_achieved" defaultValue={val(coach, "change_achieved")} textarea />
+        <ExtraFields title="6. Goals & Outcomes" fields={customFields} saved={savedCustom} />
       </Section>
 
       <Section
@@ -116,24 +279,28 @@ export default async function CoachForm({ coach }: { coach: CoachRecord }) {
         <Field label="Pricing model" name="pricing_model" defaultValue={val(coach, "pricing_model")} />
         <Field label="What's included" name="price_includes" defaultValue={val(coach, "price_includes")} textarea />
         <Field label="Additional services" name="additional_services" defaultValue={val(coach, "additional_services")} textarea />
+        <ExtraFields title="7. Pricing & Sales" fields={customFields} saved={savedCustom} />
       </Section>
 
       <Section title="8. References & Track Record">
         <Field label="References" name="references_text" defaultValue={val(coach, "references_text")} textarea />
         <Field label="Results / feedback" name="results_feedback" defaultValue={val(coach, "results_feedback")} textarea />
         <Field label="Certifications" name="certifications" defaultValue={val(coach, "certifications")} textarea />
+        <ExtraFields title="8. References & Track Record" fields={customFields} saved={savedCustom} />
       </Section>
 
       <Section title="9. Keywords & Classification">
         <Field label="Keywords (comma-separated)" name="keywords" defaultValue={val(coach, "keywords")} />
         <Field label="Main category" name="main_category" defaultValue={val(coach, "main_category")} />
         <Field label="Subcategories (comma-separated)" name="subcategories" defaultValue={val(coach, "subcategories")} />
+        <ExtraFields title="9. Keywords & Classification" fields={customFields} saved={savedCustom} />
       </Section>
 
       <Section title="10. Additional Info">
         <Field label="Additional info" name="additional_info" defaultValue={val(coach, "additional_info")} textarea />
         <Field label="Availability" name="availability" defaultValue={val(coach, "availability")} />
         <Field label="Languages (comma-separated)" name="languages" defaultValue={val(coach, "languages")} />
+        <ExtraFields title="10. Additional Info" fields={customFields} saved={savedCustom} />
       </Section>
 
       <Section
@@ -173,6 +340,7 @@ export default async function CoachForm({ coach }: { coach: CoachRecord }) {
           defaultValue={val(coach, "material_urls")}
           textarea
         />
+        <ExtraFields title="11. Media & Materials" fields={customFields} saved={savedCustom} />
       </Section>
 
       {coach && (
@@ -188,13 +356,16 @@ export default async function CoachForm({ coach }: { coach: CoachRecord }) {
         </Section>
       )}
 
-      <div className="flex gap-3 mt-6">
+      <div className="flex gap-3 mt-6 items-center">
         <button
           type="submit"
           className="bg-amber-500 text-black font-medium px-5 py-2.5 rounded-md hover:bg-amber-400 transition"
         >
           Save coach
         </button>
+        <Link href="/coaches" className="text-sm text-neutral-400 hover:text-amber-400 px-3 py-2">
+          Back to {workspace?.organization?.profile_label_plural || "list"}
+        </Link>
       </div>
     </form>
   );

@@ -1,4 +1,7 @@
 import { getPool } from "@/lib/db";
+import { canEditCompany } from "@/lib/plans";
+import { getWorkspace } from "@/lib/workspace";
+import { redirect } from "next/navigation";
 import { savePrompt, resetPrompt } from "./actions";
 import { REQUIRED_PLACEHOLDERS } from "./requiredPlaceholders";
 import { DEFAULT_PROMPTS } from "./defaultPrompts";
@@ -7,8 +10,21 @@ import PromptEditor from "./PromptEditor";
 export const dynamic = "force-dynamic";
 
 export default async function MasterPromptsPage() {
+  const workspace = await getWorkspace();
+  if (workspace && !canEditCompany(workspace.session.role)) redirect("/home");
+  if (!workspace?.organization) {
+    return (
+      <div className="max-w-3xl mx-auto p-8">
+        <h1 className="font-display text-2xl text-neutral-100 mb-2">Prompts</h1>
+        <p className="text-sm text-neutral-400">Open a company to edit the instructions its assistant uses.</p>
+      </div>
+    );
+  }
   const pool = getPool();
-  const result = await pool.query(`SELECT agent_name, system_prompt FROM agent_prompts`);
+  const result = await pool.query(
+    `SELECT agent_name, system_prompt FROM company_agent_prompts WHERE organization_id = $1`,
+    [workspace.organization.id]
+  );
   const overrides: Record<string, string> = {};
   for (const row of result.rows) {
     overrides[row.agent_name] = row.system_prompt;

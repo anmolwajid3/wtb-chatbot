@@ -3,20 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WTB — Coach finder</title>
+<title>Opas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --black: #0A0A0A;
-    --black-soft: #141414;
-    --card: #1A1918;
-    --card-hover: #201F1D;
-    --border: #2E2C29;
-    --amber: #EFA33B;
-    --amber-dark: #C97F1E;
-    --amber-tint: rgba(239, 163, 59, 0.12);
+    --black: #101610;
+    --black-soft: #1C2820;
+    --card: #1C2820;
+    --card-hover: #243028;
+    --border: #314033;
+    --amber: #FFFFFF;
+    --amber-dark: #E6E6E6;
+    --amber-tint: rgba(255, 255, 255, 0.12);
     --cream: #F3EFE6;
     --cream-soft: #B8B2A6;
     --radius-lg: 18px;
@@ -25,6 +25,20 @@
     --tier-high: #6FCB7C;
     --tier-mid: #EFA33B;
     --tier-low: #E8897A;
+  }
+
+  body.light {
+    --black: #E4E9E0;
+    --black-soft: #FFFFFF;
+    --card: #FFFFFF;
+    --card-hover: #D5DDD0;
+    --border: #B7C3B2;
+    --amber: #0E1C12;
+    --amber-dark: #16301C;
+    --amber-tint: rgba(154, 98, 20, 0.12);
+    --cream: #1C1915;
+    --cream-soft: #5E574E;
+    --shadow: 0 18px 40px -16px rgba(60, 40, 10, 0.2);
   }
 
   * { box-sizing: border-box; }
@@ -73,6 +87,31 @@
     font-size: 16px;
     line-height: 1.7;
     margin: 0 0 8px;
+  }
+  .demo-tools {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    z-index: 20;
+  }
+  .demo-tools div { display: flex; gap: 8px; }
+  .demo-tools button {
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--cream-soft);
+    border-radius: 999px;
+    padding: 6px 10px;
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .demo-tools button[aria-pressed="true"] {
+    background: var(--amber);
+    color: #241A0A;
+    border-color: var(--amber);
   }
   .demo-note {
     display: inline-block;
@@ -173,13 +212,18 @@
     justify-content: space-between;
   }
   #panel-header .title-block { display: flex; flex-direction: column; gap: 6px; }
-  #panel-header .brand {
+  #panel-header .brand-logo {
+    height: 32px;
+    width: auto;
+    display: block;
+  }
+  #panel-header .brand-name {
     font-family: 'Oswald', sans-serif;
+    font-size: 22px;
     font-weight: 600;
-    font-size: 16px;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--amber);
+    letter-spacing: 0.06em;
+    line-height: 1;
+    color: var(--cream);
   }
   #panel-header .status-pill {
     display: inline-flex;
@@ -549,12 +593,21 @@
 </head>
 <body>
 
+<div class="demo-tools">
+  <div role="group" aria-label="Language">
+    <button type="button" data-lang="en">EN</button>
+    <button type="button" data-lang="sv">SV</button>
+    <button type="button" data-lang="fi">FI</button>
+  </div>
+  <button type="button" id="theme-toggle">Light</button>
+</div>
+
 <div class="demo-page">
-  <span class="eyebrow">● WTB coaching services</span>
-  <h1>Find the coach<br>that fits your team</h1>
-  <p>Describe the situation in your own words — no forms, no dropdowns.</p>
-  <p>The assistant in the corner asks a couple of questions and points you toward the right fit.</p>
-  <div class="demo-note">This is a placeholder demo page — the widget below is what would embed on wtb.fi</div>
+  <span class="eyebrow" id="demo-kicker">Opas</span>
+  <h1 id="demo-title">Find the right<br>guide for your team</h1>
+  <p id="demo-line-1">Describe the situation in your own words.</p>
+  <p id="demo-line-2">The assistant asks a couple of questions, then points you toward a fit.</p>
+  <div class="demo-note" id="demo-note">Add ?company=your-slug to speak with one company.</div>
 </div>
 
 <button id="launcher" aria-label="Open coach-finder chat" aria-expanded="false">
@@ -564,11 +617,12 @@
   </svg>
 </button>
 
-<div id="panel" role="dialog" aria-label="WTB coach finder chat" aria-hidden="true">
+<div id="panel" role="dialog" aria-label="Opas chat" aria-hidden="true">
   <div id="panel-header">
     <div class="title-block">
-      <span class="brand">WTB coach finder</span>
-      <span class="status-pill"><span class="status-dot"></span>Usually replies in a few seconds</span>
+      <img id="panel-logo" class="brand-logo" alt="" hidden />
+      <span id="panel-name" class="brand-name" hidden></span>
+      <span class="status-pill"><span class="status-dot"></span><span id="panel-status">Usually replies in a few seconds</span></span>
     </div>
     <button id="fullscreen-btn" aria-label="Expand to full screen">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
@@ -602,6 +656,172 @@
 
 <script>
   const API_URL = 'http://localhost:8000/chat';
+  const companySlug = new URLSearchParams(location.search).get('company') || '';
+  const COPY = {
+    en: {
+      kicker: 'Opas',
+      title: 'Find the right<br>guide for your team',
+      line1: 'Describe the situation in your own words.',
+      line2: 'The assistant asks a couple of questions, then points you toward a fit.',
+      note: 'Add ?company=your-slug to speak with one company.',
+      brand: 'Opas',
+      status: 'Usually replies in a few seconds',
+      placeholder: "Describe what you're looking for...",
+      select: 'Select this one',
+      selecting: 'Selecting...',
+      greeting: "Hi! Tell me a bit about what you're looking for — a theme, a situation, a team size, whatever comes to mind — and I'll help point you to the right fit.",
+      errorSend: "Couldn't reach the assistant just now — check that the backend is running, then try again.",
+      errorSelect: "Couldn't complete that selection just now — please try again.",
+      themeToLight: 'Light',
+      themeToDark: 'Dark',
+    },
+    sv: {
+      kicker: 'Opas',
+      title: 'Hitta rätt<br>vägledare för teamet',
+      line1: 'Beskriv situationen med egna ord.',
+      line2: 'Assistenten ställer ett par frågor och pekar mot en passande profil.',
+      note: 'Lägg till ?company=ert-namn för att prata med ett företag.',
+      brand: 'Opas',
+      status: 'Svarar oftast inom några sekunder',
+      placeholder: 'Beskriv vad du letar efter...',
+      select: 'Välj den här',
+      selecting: 'Väljer...',
+      greeting: 'Hej! Berätta lite om vad du letar efter, så hjälper jag dig att hitta rätt.',
+      errorSend: 'Assistenten gick inte att nå just nu. Kontrollera att servern körs och försök igen.',
+      errorSelect: 'Valet gick inte att slutföra just nu. Försök igen.',
+      themeToLight: 'Ljust',
+      themeToDark: 'Mörkt',
+    },
+    fi: {
+      kicker: 'Opas',
+      title: 'Löydä oikea<br>opas tiimille',
+      line1: 'Kuvaa tilanne omin sanoin.',
+      line2: 'Avustaja kysyy pari kysymystä ja osoittaa sopivaan profiiliin.',
+      note: 'Lisää ?company=yrityksen-nimi keskustellaksesi yhden yrityksen kanssa.',
+      brand: 'Opas',
+      status: 'Vastaa yleensä muutamassa sekunnissa',
+      placeholder: 'Kuvaa, mitä etsit...',
+      select: 'Valitse tämä',
+      selecting: 'Valitaan...',
+      greeting: 'Hei! Kerro vähän, mitä etsit, niin autan löytämään sopivan.',
+      errorSend: 'Avustajaan ei juuri nyt saatu yhteyttä. Tarkista, että palvelin on käynnissä, ja yritä uudelleen.',
+      errorSelect: 'Valintaa ei saatu valmiiksi. Yritä uudelleen.',
+      themeToLight: 'Vaalea',
+      themeToDark: 'Tumma',
+    },
+  };
+
+  function readCookie(name) {
+    const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+    return match ? decodeURIComponent(match[1]) : '';
+  }
+  function writeCookie(name, value) {
+    document.cookie = name + '=' + value + ';path=/;max-age=31536000;samesite=lax';
+  }
+
+  let locale = ['en', 'sv', 'fi'].includes(readCookie('harbor_locale')) ? readCookie('harbor_locale') : 'en';
+  let theme = readCookie('harbor_theme') === 'light' ? 'light' : 'dark';
+  document.body.classList.toggle('light', theme === 'light');
+
+  function copy() { return COPY[locale]; }
+
+  let companyBrand = null;
+
+  function applyChrome() {
+    const text = copy();
+    const brandName = companyBrand ? companyBrand.name : text.brand;
+    const label = companyBrand && companyBrand.profile_label ? companyBrand.profile_label : '';
+    document.getElementById('demo-kicker').textContent = brandName;
+    document.title = brandName;
+    document.getElementById('panel').setAttribute('aria-label', brandName + ' chat');
+    if (companyBrand && label) {
+      const titles = {
+        en: 'Find the right<br>' + label.toLowerCase(),
+        sv: 'Hitta rätt<br>' + label.toLowerCase(),
+        fi: 'Löydä oikea<br>' + label.toLowerCase(),
+      };
+      document.getElementById('demo-title').innerHTML = titles[locale] || titles.en;
+      document.getElementById('demo-note').textContent = brandName;
+    } else {
+      document.getElementById('demo-title').innerHTML = text.title;
+      document.getElementById('demo-note').textContent = text.note;
+    }
+    document.getElementById('demo-line-1').textContent = text.line1;
+    document.getElementById('demo-line-2').textContent = text.line2;
+    const logo = document.getElementById('panel-logo');
+    const nameEl = document.getElementById('panel-name');
+    nameEl.textContent = brandName;
+    if (companyBrand && companyBrand.logo_url) {
+      const src = companyBrand.logo_url.startsWith('http')
+        ? companyBrand.logo_url
+        : 'http://localhost:3000' + companyBrand.logo_url;
+      logo.alt = brandName;
+      logo.hidden = true;
+      logo.onerror = () => {
+        logo.hidden = true;
+        nameEl.hidden = false;
+      };
+      logo.onload = () => {
+        logo.hidden = false;
+      };
+      logo.src = src;
+      nameEl.hidden = false;
+    } else if (companyBrand) {
+      logo.hidden = true;
+      logo.removeAttribute('src');
+      nameEl.hidden = false;
+    } else if (companySlug) {
+      logo.hidden = true;
+      logo.removeAttribute('src');
+      nameEl.hidden = true;
+    } else {
+      logo.alt = text.brand;
+      logo.hidden = false;
+      logo.onload = null;
+      logo.onerror = null;
+      logo.src = 'opas.png';
+      nameEl.hidden = true;
+    }
+    document.getElementById('panel-status').textContent = text.status;
+    input.placeholder = text.placeholder;
+    if (!detailSelectBtn.disabled) detailSelectBtn.textContent = text.select;
+    document.getElementById('theme-toggle').textContent = theme === 'light' ? text.themeToDark : text.themeToLight;
+    document.querySelectorAll('[data-lang]').forEach((button) => {
+      button.setAttribute('aria-pressed', button.getAttribute('data-lang') === locale ? 'true' : 'false');
+    });
+  }
+
+  async function loadCompanyBrand() {
+    if (!companySlug) return;
+    try {
+      const response = await fetch(
+        API_URL.replace('/chat', '/company') + '?organization_slug=' + encodeURIComponent(companySlug)
+      );
+      if (!response.ok) return;
+      const data = await response.json();
+      if (data && data.name) {
+        companyBrand = data;
+        applyChrome();
+      }
+    } catch (err) {
+      console.error('Could not load the company name', err);
+    }
+  }
+
+  document.querySelectorAll('[data-lang]').forEach((button) => {
+    button.addEventListener('click', () => {
+      locale = button.getAttribute('data-lang');
+      writeCookie('harbor_locale', locale);
+      applyChrome();
+    });
+  });
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    theme = theme === 'light' ? 'dark' : 'light';
+    writeCookie('harbor_theme', theme);
+    document.body.classList.toggle('light', theme === 'light');
+    applyChrome();
+  });
+
   let conversationId = null;
   let currentCoachMatches = [];
 
@@ -625,12 +845,12 @@
 
   fullscreenBtn.addEventListener('click', toggleFullscreen);
 
-  const DEFAULT_GREETING = "Hi! Tell me a bit about what you're looking for — a theme, a situation, a team size, whatever comes to mind — and I'll help point you to the right coach.";
+  const DEFAULT_GREETING = copy().greeting;
 
 async function showGreeting() {
     let greetingText = DEFAULT_GREETING;
     try {
-      const greetingUrl = API_URL.replace('/chat', '/greeting');
+      const greetingUrl = API_URL.replace('/chat', '/greeting') + (companySlug ? ('?organization_slug=' + encodeURIComponent(companySlug)) : '');
       const response = await fetch(greetingUrl);
       if (response.ok) {
         const data = await response.json();
@@ -882,7 +1102,7 @@ async function showGreeting() {
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversation_id: conversationId, message: text }),
+        body: JSON.stringify({ conversation_id: conversationId, message: text, organization_slug: companySlug || null }),
       });
 
       if (!response.ok) {
@@ -901,7 +1121,7 @@ async function showGreeting() {
       }
     } catch (err) {
       removeThinkingIndicator();
-      addErrorNote("Couldn't reach the assistant just now — check that the backend is running, then try again.");
+      addErrorNote(copy().errorSend);
       console.error(err);
     } finally {
       sendBtn.disabled = false;
@@ -918,6 +1138,8 @@ async function showGreeting() {
   const detailMeta = document.getElementById('coach-detail-meta');
   const detailMatchRow = document.getElementById('coach-detail-match-row');
   const detailSelectBtn = document.getElementById('coach-detail-select-btn');
+  applyChrome();
+  loadCompanyBrand();
 
   let activeDetailCoach = null;
 
@@ -949,7 +1171,7 @@ async function showGreeting() {
       '<span class="match-score-label">' + score + '% match</span>';
 
     detailSelectBtn.disabled = false;
-    detailSelectBtn.textContent = 'Select this coach';
+    detailSelectBtn.textContent = copy().select;
 
     detailOverlay.hidden = false;
   }
@@ -968,7 +1190,7 @@ async function showGreeting() {
     if (!activeDetailCoach || !activeDetailCoach.coach_id) return;
     const coach = activeDetailCoach;
     detailSelectBtn.disabled = true;
-    detailSelectBtn.textContent = 'Selecting...';
+    detailSelectBtn.textContent = copy().selecting;
 
     closeCoachDetail();
     addThinkingIndicator();
@@ -981,6 +1203,7 @@ async function showGreeting() {
           conversation_id: conversationId,
           message: '',
           selected_coach_id: coach.coach_id,
+          organization_slug: companySlug || null,
         }),
       });
       if (!response.ok) throw new Error('Server responded with ' + response.status);
@@ -991,7 +1214,7 @@ async function showGreeting() {
       currentCoachMatches = data.coach_matches || [];
     } catch (err) {
       removeThinkingIndicator();
-      addErrorNote("Couldn't complete that selection just now — please try again.");
+      addErrorNote(copy().errorSelect);
       console.error(err);
     }
   });

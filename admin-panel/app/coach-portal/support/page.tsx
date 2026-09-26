@@ -36,7 +36,7 @@ export default async function CoachSupportPage() {
         Support
       </h1>
       <p className="text-sm text-neutral-400 mb-6">
-        Send a message to WTB&apos;s team and track its status here.
+        Send a message to your team and track its status here.
       </p>
 
       <form

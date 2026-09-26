@@ -1,4 +1,7 @@
 import { getPool } from "@/lib/db";
+import { assertStaff, canEditCompany } from "@/lib/plans";
+import { getWorkspace, requireOrganization } from "@/lib/workspace";
+import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import GuardrailRow from "./GuardrailRow";
 import AddGuardrailForm from "./AddGuardrailForm";
@@ -7,25 +10,35 @@ export const dynamic = "force-dynamic";
 
 type Guardrail = { id: string; rule_text: string; category: string; is_active: boolean };
 
-async function getGuardrails(): Promise<Guardrail[]> {
+async function getGuardrails(organizationId: string | null): Promise<Guardrail[]> {
   const pool = getPool();
-  const result = await pool.query(`SELECT * FROM guardrails ORDER BY category, rule_text`);
+  const result = organizationId
+    ? await pool.query(
+        `SELECT * FROM guardrails WHERE organization_id = $1 ORDER BY category, rule_text`,
+        [organizationId]
+      )
+    : await pool.query(
+        `SELECT * FROM guardrails WHERE organization_id IS NULL ORDER BY category, rule_text`
+      );
   return result.rows;
 }
 
 async function addGuardrail(rule_text: string, category: string) {
   "use server";
+  await assertStaff(canEditCompany);
   if (!rule_text?.trim()) return;
+  const workspace = await getWorkspace();
   const pool = getPool();
-  await pool.query(`INSERT INTO guardrails (rule_text, category) VALUES ($1, $2)`, [
-    rule_text.trim(),
-    category?.trim() || "",
-  ]);
+  await pool.query(
+    `INSERT INTO guardrails (rule_text, category, organization_id) VALUES ($1, $2, $3)`,
+    [rule_text.trim(), category?.trim() || "", workspace?.organization?.id ?? null]
+  );
   revalidatePath("/guardrails");
 }
 
 async function updateGuardrail(id: string, rule_text: string, category: string) {
   "use server";
+  await assertStaff(canEditCompany);
   if (!rule_text?.trim()) return;
   const pool = getPool();
   await pool.query(
@@ -37,6 +50,7 @@ async function updateGuardrail(id: string, rule_text: string, category: string) 
 
 async function toggleGuardrail(id: string, currentStatus: boolean) {
   "use server";
+  await assertStaff(canEditCompany);
   const pool = getPool();
   await pool.query(`UPDATE guardrails SET is_active = $1 WHERE id = $2`, [!currentStatus, id]);
   revalidatePath("/guardrails");
@@ -44,13 +58,16 @@ async function toggleGuardrail(id: string, currentStatus: boolean) {
 
 async function deleteGuardrail(id: string) {
   "use server";
+  await assertStaff(canEditCompany);
   const pool = getPool();
   await pool.query(`DELETE FROM guardrails WHERE id = $1`, [id]);
   revalidatePath("/guardrails");
 }
 
 export default async function GuardrailsPage() {
-  const guardrails = await getGuardrails();
+  const { session, organization } = await requireOrganization();
+  if (!canEditCompany(session.role)) redirect("/home");
+  const guardrails = await getGuardrails(organization.id);
 
   return (
     <div className="max-w-5xl mx-auto p-8">

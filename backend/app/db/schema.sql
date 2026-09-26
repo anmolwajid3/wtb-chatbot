@@ -1,5 +1,6 @@
--- WTB Chatbot MVP — Database Schema
+-- Harbor — Database Schema
 -- Run this in Supabase SQL Editor, or via: psql "$DATABASE_URL" -f schema.sql
+-- The admin panel also applies the company tables on startup.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto; -- provides gen_random_uuid()
 
@@ -121,5 +122,58 @@ ON CONFLICT (name) DO NOTHING;
 INSERT INTO guardrails (rule_text, category) VALUES
 ('Never state, estimate, or imply a specific price or price range to the customer.', 'pricing'),
 ('Never give medical or legal advice.', 'medical-legal'),
-('Never mention, describe, or imply the existence of a coach, service, or credential that is not present in the verified coach data provided for this conversation.', 'fabrication')
+('Never mention, describe, or imply the existence of a person, service, or credential that is not present in the verified profile data provided for this conversation.', 'fabrication')
 ON CONFLICT DO NOTHING;
+
+-- Companies, people, and configurable profile fields.
+-- Safe to re-run on an existing database.
+
+CREATE TABLE IF NOT EXISTS organizations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    profile_label TEXT NOT NULL DEFAULT 'Guide',
+    profile_label_plural TEXT NOT NULL DEFAULT 'Guides',
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+    email TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('super_admin', 'org_admin', 'member')),
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS profile_fields (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    field_key TEXT NOT NULL,
+    label TEXT NOT NULL,
+    field_type TEXT NOT NULL CHECK (field_type IN ('text', 'textarea', 'dropdown', 'number')),
+    options TEXT[] DEFAULT '{}',
+    required BOOLEAN DEFAULT false,
+    sort_order INT DEFAULT 0,
+    UNIQUE (organization_id, field_key)
+);
+
+ALTER TABLE coaches ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
+ALTER TABLE coaches ADD COLUMN IF NOT EXISTS custom_fields JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE tone_settings ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
+ALTER TABLE example_phrases ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
+ALTER TABLE guardrails ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
+
+CREATE TABLE IF NOT EXISTS opening_greetings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    greeting_text TEXT NOT NULL,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE opening_greetings ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
+
+ALTER TABLE tone_settings DROP CONSTRAINT IF EXISTS tone_settings_name_key;
+CREATE UNIQUE INDEX IF NOT EXISTS tone_settings_org_name_uidx
+    ON tone_settings (COALESCE(organization_id, '00000000-0000-0000-0000-000000000000'::uuid), name);

@@ -1,30 +1,53 @@
 import { getPool } from "@/lib/db";
+import { assertStaff, canEditCompany } from "@/lib/plans";
+import { getWorkspace, requireOrganization } from "@/lib/workspace";
+import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
 export const dynamic = "force-dynamic";
 
-async function getToneSetting() {
+async function getToneSetting(organizationId: string | null) {
   const pool = getPool();
-  const result = await pool.query(
-    `SELECT * FROM tone_settings WHERE name = 'default_voice' LIMIT 1`
-  );
+  const result = organizationId
+    ? await pool.query(
+        `SELECT * FROM tone_settings WHERE name = 'default_voice' AND organization_id = $1 LIMIT 1`,
+        [organizationId]
+      )
+    : await pool.query(
+        `SELECT * FROM tone_settings WHERE name = 'default_voice' AND organization_id IS NULL LIMIT 1`
+      );
   return result.rows[0] || null;
 }
 
 async function saveTone(formData: FormData) {
   "use server";
+  await assertStaff(canEditCompany);
   const description_text = formData.get("description_text") as string;
+  const workspace = await getWorkspace();
+  const orgId = workspace?.organization?.id ?? null;
   const pool = getPool();
-  await pool.query(
-    `INSERT INTO tone_settings (name, description_text) VALUES ('default_voice', $1)
-     ON CONFLICT (name) DO UPDATE SET description_text = $1, updated_at = now()`,
-    [description_text]
+  const existing = await pool.query(
+    `SELECT id FROM tone_settings WHERE name = 'default_voice' AND organization_id IS NOT DISTINCT FROM $1 LIMIT 1`,
+    [orgId]
   );
+  if (existing.rows[0]) {
+    await pool.query(`UPDATE tone_settings SET description_text = $1, updated_at = now() WHERE id = $2`, [
+      description_text,
+      existing.rows[0].id,
+    ]);
+  } else {
+    await pool.query(
+      `INSERT INTO tone_settings (name, description_text, organization_id) VALUES ('default_voice', $1, $2)`,
+      [description_text, orgId]
+    );
+  }
   revalidatePath("/tone");
 }
 
 export default async function TonePage() {
-  const tone = await getToneSetting();
+  const { session, organization } = await requireOrganization();
+  if (!canEditCompany(session.role)) redirect("/home");
+  const tone = await getToneSetting(organization.id);
 
   return (
     <div className="max-w-3xl mx-auto p-8">
@@ -32,7 +55,7 @@ export default async function TonePage() {
         Tone of Voice
       </h1>
       <p className="text-sm text-neutral-400 mb-6">
-        This is the bot&apos;s underlying voice — it stays constant across every conversation.
+        This is {organization.name}&apos;s voice. Other companies do not use it. It stays constant across every conversation.
         What changes per-conversation is phrasing, based on the customer&apos;s mood (see the
         Example Phrases page for that).
       </p>

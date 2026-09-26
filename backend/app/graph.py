@@ -1,5 +1,5 @@
 """
-LangGraph wiring for the WTB chatbot.
+LangGraph wiring for the Harbor matching assistant.
 
 Flow (per blueprint Section 9.3 — grounding enforced by node ORDER, not just
 prompt wording):
@@ -23,6 +23,7 @@ request eventually returns even if the model can't converge; it is not a
 cost-control measure.
 """
 import uuid
+import re
 from typing import TypedDict, Annotated
 from langgraph.graph import StateGraph, END
 
@@ -38,6 +39,7 @@ from app.db.connection import save_conversation_state, fetch_coaches_by_ids
 
 class ChatState(TypedDict):
     conversation_id: str
+    organization_id: str | None
     messages: list  # [{"role": "user"|"assistant", "content": str}]
     turn_count: int
     gathered_slots: dict
@@ -58,6 +60,8 @@ class ChatState(TypedDict):
     review_issues: list
     safety_loop_count: int
     safety_fallback_used: bool
+    advice_blocked: bool
+    off_topic_this_turn: bool
     final_reply: str
     quote_summary: str
 
@@ -69,7 +73,7 @@ def _route_after_intent(state: ChatState) -> str:
 def _spam_reply_node(state: ChatState) -> ChatState:
     state["final_reply"] = (
         "Thanks for reaching out! It looks like this message might not be related "
-        "to coaching services — if I've misunderstood, feel free to try again "
+        "to these services — if I've misunderstood, feel free to try again "
         "describing what you're looking for."
     )
     return state
@@ -100,6 +104,9 @@ def _route_after_review(state: ChatState) -> str:
     if round_is_clean:
         return "summarizer"
     if state.get("safety_loop_count", 0) >= MAX_SAFETY_ROUNDS:
+        # A quality disagreement must not hide a reply the guardrail already accepted.
+        if not state.get("guardrail_violated", False):
+            return "summarizer"
         return "safety_fallback"
     return "guardrail_check"
 
@@ -134,7 +141,11 @@ def build_graph():
     graph.add_edge("end_spam", END)
     graph.add_edge("mood_tone", "coach_matcher")
     graph.add_edge("coach_matcher", "formatter")
-    graph.add_edge("formatter", "guardrail_check")
+    graph.add_conditional_edges(
+        "formatter",
+        lambda state: "guardrail_check" if state.get("ready_to_match") else "done",
+        {"guardrail_check": "guardrail_check", "done": END},
+    )
     graph.add_edge("guardrail_check", "response_reviewer")
     graph.add_conditional_edges(
         "response_reviewer",
@@ -235,8 +246,8 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
     state["post_selection_turns"] = 0
 
     reply = (
-        f"Great choice, {coach_name}'s {program_name} it is. "
-        f"Could I get your name and email so our team can follow up directly with next steps?"
+        f"Great choice, {coach_name}'s {program_name} it is.{_known_fit_sentence(state)} "
+        f"Could I get your name and email so the team can follow up with next steps?"
     )
     state["messages"].append({
         "role": "user",
@@ -251,6 +262,7 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
         outcome=state["outcome"],
         matched_coach_ids=state["matched_coaches"],
         mood_history=state.get("mood_history", []),
+        organization_id=state.get("organization_id"),
     )
 
     return {
@@ -263,18 +275,137 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
     }
 
 
-OPTIONAL_DETAILS_PROMPT_REPLY = (
-    "Perfect, thank you. Just a couple more quick details that'd help our team "
-    "prepare, if you have them handy: roughly how many people, what format works "
-    "best (in-person, remote, or hybrid), and any scheduling constraints we "
-    "should know about? No worries if you'd rather skip this and let the team "
-    "sort it out directly."
+_PRICE_ASK = re.compile(r"\b(price|pricing|cost|how much|fee|fees|charg\w*)\b", re.I)
+_EMAIL = re.compile(r"[\w.+-]+@[\w.-]+\.\w+")
+_FORMAT = re.compile(r"\b(remote|distributed|virtual|online|hybrid|in[- ]person)\b", re.I)
+_SCHEDULE = re.compile(
+    r"\b(monday|tuesday|wednesday|thursday|friday|schedule|morning|evening|calendar)\b",
+    re.I,
 )
 
-CLOSING_REPLY = (
-    "Thank you, that's everything I need. I'll get this over to WTB's team "
-    "right away, and they'll be in touch directly to confirm timing and next steps."
-)
+
+def _known_fit_facts(state: dict) -> list[str]:
+    slots = state.get("gathered_slots") or {}
+    need = slots.get("need_description") or ""
+    facts = []
+    if slots.get("group_size"):
+        facts.append(f"about {slots['group_size']} people")
+    if slots.get("timing"):
+        facts.append(f"starting {slots['timing']}")
+    found_format = _FORMAT.search(need)
+    if found_format:
+        word = found_format.group(0).lower().replace("-", " ")
+        facts.append("remote" if word in {"distributed", "virtual", "online"} else word)
+    return facts
+
+
+def _known_fit_sentence(state: dict) -> str:
+    facts = _known_fit_facts(state)
+    if not facts:
+        return ""
+    return " I already have " + ", ".join(facts) + "."
+
+
+def _missing_optional_details(state: dict) -> list[str]:
+    slots = state.get("gathered_slots") or {}
+    need = slots.get("need_description") or ""
+    missing = []
+    if not slots.get("group_size"):
+        missing.append("roughly how many people")
+    if not _FORMAT.search(need):
+        missing.append("whether in-person, remote, or hybrid works best")
+    if not _SCHEDULE.search(need):
+        missing.append("any day or time to work around")
+    return missing
+
+
+def _selected_coach(state: dict) -> dict:
+    ids = state.get("matched_coaches") or []
+    if not ids:
+        return {}
+    rows = fetch_coaches_by_ids([ids[0]])
+    return rows[0] if rows else {}
+
+
+def _selection_reply(state: dict, message: str) -> tuple[str, str]:
+    """Answer the message in front of us. Returns the reply and stay, ask, or close."""
+    coach = _selected_coach(state)
+    name = coach.get("coach_name") or "that coach"
+    program = coach.get("program_name") or "the program"
+    known = _known_fit_sentence(state)
+
+    if _PRICE_ASK.search(message):
+        already = (state.get("gathered_slots") or {}).get("contact")
+        if already:
+            return (
+                f"I can't tell you what {name} charges for {program}. "
+                f"The team will include the quote when they write to {already}.{known}"
+            ), "stay"
+        return (
+            f"I can't tell you what {name} charges for {program}. "
+            f"The team puts the number in the quote, so I still need your name and email.{known}"
+        ), "stay"
+
+    email = _EMAIL.search(message)
+    if email:
+        slots = dict(state.get("gathered_slots") or {})
+        slots["contact"] = email.group(0)
+        state["gathered_slots"] = slots
+        missing = _missing_optional_details(state)
+        if not missing:
+            facts = ", ".join(_known_fit_facts(state)) or "what you described"
+            return (
+                f"Thank you. I'll send {name}'s {program} to the team with {facts}. "
+                f"They'll follow up at {email.group(0)}."
+            ), "close"
+        if len(missing) == 1:
+            ask = missing[0]
+        else:
+            ask = ", ".join(missing[:-1]) + ", and " + missing[-1]
+        return (
+            f"Thank you. I'll use {email.group(0)} for the follow-up on {program}.{known} "
+            f"If you have it, {ask}? Skipping that is fine."
+        ), "ask"
+
+    lowered = message.lower()
+    if coach.get("duration") and re.search(r"\b(how long|duration|weeks|length)\b", lowered):
+        return (
+            f"{program} with {name} runs {coach['duration']}.{known} "
+            f"I still need your name and email before the team can follow up."
+        ), "stay"
+    if coach.get("delivery_format") and re.search(r"\b(remote|hybrid|format|online|in person|in-person)\b", lowered):
+        return (
+            f"{name} delivers {program} as {coach['delivery_format']}.{known} "
+            f"I still need your name and email before the team can follow up."
+        ), "stay"
+
+    return (
+        f"I still need your name and email so the team can follow up on {name}'s {program}.{known}"
+    ), "stay"
+
+
+def _closing_reply(state: dict, message: str) -> str:
+    coach = _selected_coach(state)
+    name = coach.get("coach_name") or "the coach"
+    program = coach.get("program_name") or "the program"
+    note = " ".join(message.split())
+    if len(note) > 160:
+        note = note[:160].rstrip() + "..."
+    if _PRICE_ASK.search(message):
+        return (
+            f"I can't tell you what {name} charges for {program}. "
+            f"I'll send what I have to the team and they'll include the quote when they write."
+        )
+    if re.fullmatch(r"(skip|no|nothing|nope|n/a|none)[.!]?", note, re.I):
+        facts = ", ".join(_known_fit_facts(state))
+        extra = f" I already have {facts}." if facts else ""
+        return (
+            f"No problem.{extra} I'll send {name}'s {program} to the team and they'll be in touch."
+        )
+    return (
+        f"I'll pass that along with {name}'s {program}: {note}. "
+        f"The team will follow up with the quote and next steps."
+    )
 
 
 def _handle_post_selection_message(conversation_id: str, message: str) -> dict:
@@ -288,7 +419,7 @@ def _handle_post_selection_message(conversation_id: str, message: str) -> dict:
     round 1 (right after contact info is given) asks ONE consolidated,
     explicitly-optional question about group size / format / scheduling —
     details the brief always treated as optional to REQUIRE for matching,
-    but that are still genuinely useful for WTB's team to have, and this is
+    but that are still genuinely useful for the team to have, and this is
     the natural moment to ask: after commitment, not before it. Round 2
     (whatever they answer, including "skip") closes out and compiles the
     final brief.
@@ -296,59 +427,51 @@ def _handle_post_selection_message(conversation_id: str, message: str) -> dict:
     state = _conversations_in_memory[conversation_id]
     state["messages"].append({"role": "user", "content": message})
 
-    turns = state.get("post_selection_turns", 0)
+    if _PRICE_ASK.search(message) or _EMAIL.search(message) or not state.get("awaiting_optional_details"):
+        reply, mode = _selection_reply(state, message)
+    else:
+        reply, mode = _closing_reply(state, message), "close"
 
-    if turns == 0:
-        state["post_selection_turns"] = 1
-        reply = OPTIONAL_DETAILS_PROMPT_REPLY
-        state["messages"].append({"role": "assistant", "content": reply})
-        _conversations_in_memory[conversation_id] = state
+    if mode == "ask":
+        state["awaiting_optional_details"] = True
+    if mode == "close":
+        state = run_summarizer(state)
+        state["awaiting_optional_details"] = False
 
-        save_conversation_state(
-            conversation_id=conversation_id,
-            transcript=state["messages"],
-            outcome=state["outcome"],
-            matched_coach_ids=state.get("matched_coaches", []),
-            mood_history=state.get("mood_history", []),
-        )
-
-        return {
-            "conversation_id": conversation_id,
-            "reply": reply,
-            "outcome": state["outcome"],
-            "detected_mood": state.get("detected_mood", "neutral"),
-            "coach_matches": [],
-            **_empty_debug_fields(),
-        }
-
-    # turns >= 1: whatever they just said (real details, or "skip") is the
-    # last piece — compile the final brief now.
-    result_state = run_summarizer(state)
-
-    reply = CLOSING_REPLY
-    result_state["messages"].append({"role": "assistant", "content": reply})
-    result_state["final_reply"] = reply
-    _conversations_in_memory[conversation_id] = result_state
+    state["messages"].append({"role": "assistant", "content": reply})
+    state["final_reply"] = reply
+    _conversations_in_memory[conversation_id] = state
 
     save_conversation_state(
         conversation_id=conversation_id,
-        transcript=result_state["messages"],
-        outcome=result_state["outcome"],
-        matched_coach_ids=result_state.get("matched_coaches", []),
-        mood_history=result_state.get("mood_history", []),
+        transcript=state["messages"],
+        outcome=state["outcome"],
+        matched_coach_ids=state.get("matched_coaches", []),
+        mood_history=state.get("mood_history", []),
+        organization_id=state.get("organization_id"),
     )
 
     return {
         "conversation_id": conversation_id,
         "reply": reply,
-        "outcome": result_state["outcome"],
-        "detected_mood": result_state.get("detected_mood", "neutral"),
+        "outcome": state["outcome"],
+        "detected_mood": state.get("detected_mood", "neutral"),
         "coach_matches": [],
         **_empty_debug_fields(),
     }
 
 
-def run_turn(conversation_id: str | None, message: str, selected_coach_id: str | None = None) -> dict:
+def forget_conversation(conversation_id: str) -> None:
+    _conversations_in_memory.pop(conversation_id, None)
+
+
+def run_turn(
+    conversation_id: str | None,
+    message: str,
+    selected_coach_id: str | None = None,
+    organization_id: str | None = None,
+    record: bool = True,
+) -> dict:
     if selected_coach_id:
         if not conversation_id:
             return {
@@ -389,11 +512,16 @@ def run_turn(conversation_id: str | None, message: str, selected_coach_id: str |
             "review_issues": [],
             "safety_loop_count": 0,
             "safety_fallback_used": False,
+            "advice_blocked": False,
+            "off_topic_this_turn": False,
             "final_reply": "",
             "quote_summary": "",
+            "organization_id": organization_id,
         }
     else:
         state = _conversations_in_memory[conversation_id]
+
+    state["organization_id"] = organization_id or state.get("organization_id")
 
     state["messages"].append({"role": "user", "content": message})
 
@@ -405,13 +533,15 @@ def run_turn(conversation_id: str | None, message: str, selected_coach_id: str |
 
     # Persist to Postgres after every turn so nothing is lost and the
     # debug/traceability view always reflects the latest state.
-    save_conversation_state(
-        conversation_id=conversation_id,
-        transcript=result_state["messages"],
-        outcome=result_state["outcome"] if result_state["outcome"] != "in_progress" else "in_progress",
-        matched_coach_ids=result_state.get("matched_coaches", []),
-        mood_history=result_state.get("mood_history", []),
-    )
+    if record:
+        save_conversation_state(
+            conversation_id=conversation_id,
+            transcript=result_state["messages"],
+            outcome=result_state["outcome"] if result_state["outcome"] != "in_progress" else "in_progress",
+            matched_coach_ids=result_state.get("matched_coaches", []),
+            mood_history=result_state.get("mood_history", []),
+            organization_id=result_state.get("organization_id"),
+        )
 
     # Build structured coach match data for the widget's confidence visualization
     # and recommendation cards. This is deliberately assembled fresh here, from

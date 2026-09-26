@@ -3,7 +3,7 @@ Summarizer Agent.
 
 Runs once the conversation reaches a "matched" or "purchase_order" outcome
 and the customer has provided (or been asked for) contact info. Compiles a
-structured brief for WTB's team — the "smart pre-qualification" requirement.
+structured brief for the company's team — the "smart pre-qualification" requirement.
 
 Produces genuinely structured fields (not one paragraph) so the admin panel
 can render a scannable card rather than a wall of text.
@@ -24,14 +24,14 @@ class QuoteSummary(BaseModel):
     )
     open_questions: list[str] = Field(
         default_factory=list,
-        description="Specific things still unknown or unconfirmed that WTB's team needs to follow up on. "
+        description="Specific things still unknown or unconfirmed that the team needs to follow up on. "
                     "Short fragments, not full sentences.",
     )
-    next_step: str = Field(description="A single clear sentence describing what WTB's team should do next")
+    next_step: str = Field(description="A single clear sentence describing what the team should do next")
     contact_info: str | None = Field(default=None, description="Contact info if the customer provided any, else null")
 
 
-SUMMARY_SYSTEM_PROMPT_DEFAULT = """Summarize this conversation into a structured internal brief for WTB's team.
+SUMMARY_SYSTEM_PROMPT_DEFAULT = """Summarize this conversation into a structured internal brief for the company's team.
 Be concise and factual — key_details and open_questions should be short fragments, not full sentences.
 Do not include pricing discussion since none should have occurred.
 
@@ -48,10 +48,10 @@ def run_summarizer(state: dict) -> dict:
     conversation_text = "\n".join(f"{m['role']}: {m['content']}" for m in state["messages"])
 
     #llm = get_llm(temperature=0.0)
-    llm = get_llm(temperature=0.0, agent_name="summarizer")
+    llm = get_llm(temperature=0.0, agent_name="summarizer", organization_id=state.get("organization_id"))
     structured_llm = llm.with_structured_output(QuoteSummary)
 
-    prompt_template = get_agent_prompt("summarizer", SUMMARY_SYSTEM_PROMPT_DEFAULT)
+    prompt_template = get_agent_prompt("summarizer", SUMMARY_SYSTEM_PROMPT_DEFAULT, state.get("organization_id"))
     try:
         prompt = prompt_template.format(conversation=conversation_text)
     except (KeyError, IndexError):

@@ -26,21 +26,24 @@ as exactly one of: positive, negative, neutral.
 Judge only the latest message, in light of the conversation so far."""
 
 
-def run_mood_tone(state: dict) -> dict:
-    #llm = get_llm(temperature=0.0)
-    llm = get_llm(temperature=0.0, agent_name="mood_tone")
-    structured_llm = llm.with_structured_output(MoodClassification)
-
-    latest_message = state["messages"][-1]["content"]
-    system_prompt = get_agent_prompt("mood_tone", MOOD_SYSTEM_PROMPT_DEFAULT)
-    result: MoodClassification = structured_llm.invoke(
-        [
-            {"role": "system","content": system_prompt},
-            {"role": "user", "content": latest_message},
-        ]
+def classify_mood(text: str) -> str:
+    """Local read of the latest line, so a follow-up does not wait on another model call."""
+    lowered = text.lower()
+    negative = (
+        "disconnect", "low-energy", "low energy", "stress", "frustrat", "exhaust",
+        "anxious", "burnout", "stuck", "struggl", "unhappy", "tired", "demotivat", "conflict",
     )
+    positive = ("excited", "great", "happy", "wonderful", "eager", "thrilled", "love this")
+    if any(word in lowered for word in negative):
+        return "negative"
+    if any(word in lowered for word in positive):
+        return "positive"
+    return "neutral"
 
-    mood = result.mood if result.mood in ("positive", "negative", "neutral") else "neutral"
+
+def run_mood_tone(state: dict) -> dict:
+    latest_message = state["messages"][-1]["content"]
+    mood = classify_mood(latest_message)
 
     state["detected_mood"] = mood
     mood_history = state.get("mood_history", [])
@@ -48,6 +51,6 @@ def run_mood_tone(state: dict) -> dict:
     state["mood_history"] = mood_history
 
     # Fetch admin-editable tone guidance + example phrases for this mood
-    state["tone_guidance"] = fetch_tone_guidance(mood)
+    state["tone_guidance"] = fetch_tone_guidance(mood, state.get("organization_id"))
 
     return state

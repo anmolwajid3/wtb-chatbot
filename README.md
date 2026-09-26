@@ -1,10 +1,23 @@
-# WTB Coach-Matching Chatbot — MVP Codebase
+# Harbor — matching workspace
 
-This is the working code for the system described in the *GENT Pilot with WTB —
-Technical & Delivery Blueprint*. Two parts:
+Harbor is a general matching application. Coaching firms, universities, and other service companies can adopt it and shape the profiles to their own work. **GPT Lab** operates the platform.
 
-- **`backend/`** — Python/FastAPI/LangGraph multi-agent chatbot
-- **`admin-panel/`** — Next.js admin panel (coach profiles, tone, phrases, guardrails)
+- **`backend/`** — Python/FastAPI/LangGraph assistant
+- **`admin-panel/`** — Next.js workspace (companies, people, profiles, voice, phrases, rules)
+- **`widget/`** — the visitor chat. Add `?company=your-slug` to scope it to one company.
+
+Both the backend and the admin panel connect to the same Postgres database.
+
+The admin panel signs people in with email and password. On first launch it creates a GPT Lab super admin:
+
+- Email: `SUPER_ADMIN_EMAIL` (default `admin@gptlab.dev`)
+- Password: `SUPER_ADMIN_PASSWORD`, or `ADMIN_PANEL_PASSWORD` if that is already set, otherwise `harbor-admin`
+
+GPT Lab creates companies. Each company then adds its own admins and members. A company can rename profiles (Guide, Coach, Course) and add its own fields: short text, long text, number, or dropdown. An assistant that drafts those fields from a description is a later idea and is not part of this release.
+
+The workspace and the visitor widget support English, Swedish, and Finnish. A light and dark theme is available from the same control.
+
+---
 
 Both connect to the same Supabase Postgres database.
 
@@ -84,10 +97,7 @@ Run it:
 ```bash
 npm run dev
 ```
-Open http://localhost:3000 — you'll see four sections: Coaches, Tone of Voice,
-Example Phrases, Guardrails. Add a coach here, then immediately test a matching
-conversation via the backend — no redeploy needed, the bot reads the database
-live on every request.
+Open http://localhost:3000. The landing page is public. Sign in to reach the workspace: companies, people, profiles, voice, phrases, and rules. The assistant reads the database live, so a new profile is available without a redeploy.
 
 ---
 
@@ -106,7 +116,7 @@ cd admin-panel && npm run dev
 ## 5. Project structure
 
 ```
-wtb-chatbot/
+.
 ├── backend/
 │   ├── app/
 │   │   ├── agents/
@@ -115,7 +125,7 @@ wtb-chatbot/
 │   │   │   ├── coach_matcher.py     # structured SQL lookup, not RAG — closed-set matching
 │   │   │   ├── formatter.py         # ONLY node that writes the customer-facing reply
 │   │   │   ├── guardrail_check.py   # semantic check + regex pre-filter, hard gate
-│   │   │   └── summarizer.py        # compiles the quote_requests brief for WTB's team
+│   │   │   └── summarizer.py        # compiles the quote_requests brief for the company's team
 │   │   ├── db/
 │   │   │   ├── schema.sql           # run this first, in Supabase SQL Editor
 │   │   │   └── connection.py        # all DB access — pricing fields deliberately excluded
@@ -147,8 +157,7 @@ wtb-chatbot/
 - Purchase Order routing when no coach matches
 
 **Needs your attention before this is customer-facing:**
-- Admin panel has NO real authentication yet — add real login before giving
-  Minttu/Mari access to anything beyond localhost testing
+- Sign-in is email and password. GPT Lab is the super admin; each company has its own admins and members.
 - Langfuse tracing is referenced in the blueprint but not yet wired into
   `graph.py` — worth adding for the debug/traceability requirement
 - The in-memory conversation store in `graph.py` (`_conversations_in_memory`)

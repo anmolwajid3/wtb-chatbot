@@ -1,10 +1,16 @@
 "use server";
 
 import { getPool } from "@/lib/db";
+import { getWorkspace, listProfileFields } from "@/lib/workspace";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import bcrypt from "bcryptjs";
+import { assertStaff, canEditCompany } from "@/lib/plans";
+
+async function requireEditor() {
+  await assertStaff(canEditCompany);
+}
 
 const IMAGE_BUCKET = "coach-images";
 
@@ -38,6 +44,7 @@ function intOrNull(formData: FormData, name: string): number | null {
 }
 
 export async function toggleCoachActive(formData: FormData) {
+  await requireEditor();
   const id = formData.get("id") as string;
   const currentStatus = formData.get("currentStatus") === "true";
   const pool = getPool();
@@ -49,11 +56,22 @@ export async function toggleCoachActive(formData: FormData) {
 }
 
 export async function saveCoach(formData: FormData) {
+  await requireEditor();
   const id = formData.get("id") as string | null;
   const pool = getPool();
 
+  const workspaceForName = await getWorkspace();
+  const nameDefs = workspaceForName?.organization
+    ? await listProfileFields(workspaceForName.organization.id)
+    : [];
+  let coachName = String(formData.get("coach_name") || "").trim();
+  if (!coachName && nameDefs[0]) {
+    coachName = String(formData.get(`cf_${nameDefs[0].field_key}`) || "").trim();
+  }
+  if (!coachName) redirect("/profile-structure");
+
   const fields = {
-    coach_name: formData.get("coach_name") as string,
+    coach_name: coachName,
     company_name: textOrNull(formData, "company_name"),
     business_id: textOrNull(formData, "business_id"),
     email: textOrNull(formData, "email"),
@@ -94,19 +112,38 @@ export async function saveCoach(formData: FormData) {
     material_urls: arrField(formData, "material_urls"),
   };
 
-  const columns = Object.keys(fields);
-  const values = Object.values(fields);
+  const workspace = await getWorkspace();
+  const orgId = workspace?.organization?.id;
+  if (!orgId) redirect("/companies?need=1");
+
+  const defs = await listProfileFields(orgId);
+  const custom: Record<string, string> = {};
+  for (const field of defs) {
+    const raw = String(formData.get(`cf_${field.field_key}`) ?? "").trim();
+    if (raw) custom[field.field_key] = raw;
+  }
+
+  const record: Record<string, unknown> = {
+    ...fields,
+    organization_id: orgId,
+    custom_fields: JSON.stringify(custom),
+  };
+
+  const columns = Object.keys(record);
+  const values = Object.values(record);
+  const placeholders = columns.map((col, i) =>
+    col === "custom_fields" ? `$${i + 1}::jsonb` : `$${i + 1}`
+  );
 
   if (id) {
-    const setClause = columns.map((col, i) => `${col} = $${i + 1}`).join(", ");
+    const setClause = columns.map((col, i) => `${col} = ${placeholders[i]}`).join(", ");
     await pool.query(
-      `UPDATE coaches SET ${setClause}, updated_at = now() WHERE id = $${columns.length + 1}`,
-      [...values, id]
+      `UPDATE coaches SET ${setClause}, updated_at = now() WHERE id = $${columns.length + 1} AND (organization_id IS NULL OR organization_id = $${columns.length + 2})`,
+      [...values, id, orgId]
     );
   } else {
-    const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
     await pool.query(
-      `INSERT INTO coaches (${columns.join(", ")}) VALUES (${placeholders})`,
+      `INSERT INTO coaches (${columns.join(", ")}) VALUES (${placeholders.join(", ")})`,
       values
     );
   }
@@ -119,6 +156,7 @@ export async function uploadCoachImage(
   coachId: string,
   formData: FormData
 ): Promise<{ error?: string }> {
+  await requireEditor();
   const file = formData.get("file") as File | null;
   if (!file || file.size === 0) return { error: "No file selected" };
   if (!file.type.startsWith("image/")) return { error: "File must be an image" };
@@ -153,6 +191,7 @@ export async function uploadCoachImage(
 }
 
 export async function removeCoachImage(coachId: string, imageUrl: string): Promise<void> {
+  await requireEditor();
   const pool = getPool();
   const existing = await pool.query(`SELECT image_urls FROM coaches WHERE id = $1`, [coachId]);
   const currentUrls: string[] = existing.rows[0]?.image_urls || [];
@@ -186,6 +225,7 @@ export async function setCoachAccountCredentials(
   username: string,
   password: string
 ): Promise<{ error?: string }> {
+  await requireEditor();
   if (!username?.trim()) return { error: "Username is required" };
   if (!password || password.length < 8) return { error: "Password must be at least 8 characters" };
 

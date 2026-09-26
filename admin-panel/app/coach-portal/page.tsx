@@ -68,7 +68,7 @@ export default async function CoachPortalPage() {
   if (!coach) {
     return (
       <div className="max-w-3xl mx-auto p-8 text-neutral-400">
-        Your profile could not be found. Please contact WTB.
+        Your profile could not be found. Please contact your company admin.
       </div>
     );
   }
@@ -81,7 +81,7 @@ export default async function CoachPortalPage() {
         My Profile
       </h1>
       <p className="text-sm text-neutral-400 mb-6">
-        This is what WTB&apos;s assistant and team see about your services. Keep it accurate and
+        This is what the assistant and your team see about your services. Keep it accurate and
         up to date.
       </p>
 
@@ -184,7 +184,7 @@ export default async function CoachPortalPage() {
 
         <Section
           title="Pricing"
-          note="Used internally by WTB's team only — the chatbot is never allowed to share this with customers."
+          note="Used internally by your team only — the assistant is never allowed to share this with visitors."
         >
           <Field label="Price from" name="price_from" defaultValue={val(coach, "price_from")} />
           <Field label="Pricing model" name="pricing_model" defaultValue={val(coach, "pricing_model")} />

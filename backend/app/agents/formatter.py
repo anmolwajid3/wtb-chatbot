@@ -8,10 +8,12 @@ conversation so far. This ordering is the structural anti-hallucination
 guarantee described in blueprint Section 9.3 — this node cannot invent
 anything because it is never given anything to invent from.
 """
+import re
+from app.agents.guardrail_check import visitor_advice_rule
 from app.llm import get_llm
-from app.db.connection import fetch_coaches_by_ids, get_agent_prompt
+from app.db.connection import fetch_coaches_by_ids, fetch_match_settings, get_agent_prompt
 
-FORMATTER_SYSTEM_PROMPT_DEFAULT = """You are WTB's warm, professional coaching-matchmaker assistant.
+FORMATTER_SYSTEM_PROMPT_DEFAULT = """You are a warm, professional matchmaker for this company's services.
 Base tone: {base_tone}
 
 The customer's current mood has been read as: {mood}. Adapt your phrasing (not your underlying voice) to match. These example phrases show the TONE and WARMTH to aim for — write your own sentence in a similar spirit each time: {example_phrases}
@@ -25,6 +27,7 @@ words instead.
 
 Rules you must follow, no exceptions:
 - NEVER state, estimate, or imply any price or price range.
+- NEVER give medical or legal advice. If the visitor asks for either, refuse in one sentence and return to finding a coach.
 - NEVER mention a coach, program, or credential that is not listed below.
 - Whether matching has actually been attempted yet this turn: {matching_was_attempted}
 - If matching_was_attempted is False, the coach list being empty means NOTHING —
@@ -34,7 +37,7 @@ Rules you must follow, no exceptions:
   shows real interest in their situation) before matching is attempted.
 - Only if matching_was_attempted is True AND no coaches are listed below should
   you say clearly that you'll pass this on to the team to find the right fit
-  personally. Frame this as a positive, deliberate next step — WTB has a wider
+  personally. Frame this as a positive, deliberate next step — the team has a wider
   network than what's searched automatically. Do NOT say or imply "I don't have
   coach information" or anything suggesting a system limitation; this is a
   normal, intentional outcome, not a shortfall.
@@ -63,12 +66,64 @@ Conversation so far:
 """
 
 
+def _price_question(text: str) -> bool:
+    return bool(re.search(r"\b(price|pricing|cost|how much|fee|fees)\b", text, re.I))
+
+
+def boundary_reply(slots: dict, lead: str) -> str:
+    """Refuse or redirect, then ask only the next coaching question still missing."""
+    has_situation = bool(slots.get("theme") or slots.get("need_description"))
+    if not has_situation:
+        return f"{lead} If you want help finding a coach, what's going on with the team?"
+    if not slots.get("timing"):
+        return f"{lead} When would you want this to start?"
+    return lead
+
+
+def follow_up_reply(slots: dict, latest_user: str) -> str | None:
+    """One next question. None means the conversation is ready for a real match."""
+    has_situation = bool(slots.get("theme") or slots.get("need_description"))
+    if not has_situation:
+        if _price_question(latest_user):
+            return "I can't talk about price until I know the fit. What's going on with the team?"
+        return "What's going on, in your own words?"
+    if not slots.get("timing"):
+        return "That gives me a real picture. When would you want this to start?"
+    return None
+
+
 def run_formatter(state: dict) -> dict:
+    latest_user = state["messages"][-1]["content"] if state.get("messages") else ""
+    slots = state.get("gathered_slots", {})
+    if state.get("advice_blocked") or visitor_advice_rule(latest_user, state.get("organization_id")):
+        state["advice_blocked"] = True
+        reply = boundary_reply(slots, "I can't give medical or legal advice.")
+        state["draft_reply"] = reply
+        state["final_reply"] = reply
+        return state
+    if state.get("off_topic_this_turn"):
+        reply = boundary_reply(slots, "That's outside what I can help with here.")
+        state["draft_reply"] = reply
+        state["final_reply"] = reply
+        return state
+    if not state.get("ready_to_match"):
+        reply = follow_up_reply(slots, latest_user)
+        if reply is None:
+            reply = "Before I suggest anyone, is there one more detail about how this is showing up for the team?"
+        state["draft_reply"] = reply
+        state["final_reply"] = reply
+        return state
+
     tone_guidance = state.get("tone_guidance", {"base_tone": "Warm and professional.", "example_phrases": []})
     mood = state.get("detected_mood", "neutral")
 
     matched_ids = state.get("matched_coaches", [])
     coaches = fetch_coaches_by_ids(matched_ids) if matched_ids else []
+    settings = fetch_match_settings(state.get("organization_id"))
+    if settings["show_match_score"]:
+        scores = state.get("matched_coach_scores") or {}
+        for coach in coaches:
+            coach["match_score"] = scores.get(str(coach["id"]))
     matching_was_attempted = bool(state.get("ready_to_match"))
 
     slots = state.get("gathered_slots", {})
@@ -83,18 +138,25 @@ def run_formatter(state: dict) -> dict:
         base_tone=tone_guidance["base_tone"],
         mood=mood,
         example_phrases=tone_guidance["example_phrases"],
+        off_topic=bool(state.get("off_topic_this_turn")),
         coaches=coaches,
         matching_was_attempted=matching_was_attempted,
         still_missing=still_missing if still_missing else "none — all required fields gathered",
         conversation=conversation_text,
     )
-    prompt_template = get_agent_prompt("formatter", FORMATTER_SYSTEM_PROMPT_DEFAULT)
+    prompt_template = get_agent_prompt("formatter", FORMATTER_SYSTEM_PROMPT_DEFAULT, state.get("organization_id"))
     try:
         prompt = prompt_template.format(**format_kwargs)
     except (KeyError, IndexError):
         prompt = FORMATTER_SYSTEM_PROMPT_DEFAULT.format(**format_kwargs)
+    prompt += (
+        "\n\nNEVER give medical or legal advice. If the visitor asked for either, "
+        "refuse in one sentence and then continue with the coaching conversation."
+    )
+    if settings["show_match_score"] and coaches:
+        prompt += "\nWhen you name a profile, include its match_score as a percentage."
 
-    llm = get_llm(temperature=0.4, agent_name="formatter")  # a little warmth/variation is fine here, unlike other agents
+    llm = get_llm(temperature=0.4, agent_name="formatter", organization_id=state.get("organization_id"))
     response = llm.invoke([{"role": "system", "content": prompt}])
 
     state["draft_reply"] = response.content

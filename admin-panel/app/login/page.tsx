@@ -1,23 +1,12 @@
-import { cookies } from "next/headers";
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AccountLogin } from "../components/AccountLogin";
+import { HarborMark } from "../components/HarborMark";
+import { Preferences } from "../components/Preferences";
+import { getLocale, getTheme, t } from "@/lib/i18n";
+import { getStaffSession } from "@/lib/workspace";
 
-async function loginAction(formData: FormData) {
-  "use server";
-  const password = formData.get("password") as string;
-
-  if (password && password === process.env.ADMIN_PANEL_PASSWORD) {
-    const cookieStore = await cookies();
-    cookieStore.set("wtb_admin_session", "authenticated", {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 8,
-    });
-    redirect("/");
-  }
-
-  redirect("/login?error=1");
-}
+export const dynamic = "force-dynamic";
 
 export default async function LoginPage({
   searchParams,
@@ -25,37 +14,65 @@ export default async function LoginPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const params = await searchParams;
+  const locale = await getLocale();
+  const theme = await getTheme();
+
+  if (params.error !== "db") {
+    try {
+      if (await getStaffSession()) redirect("/home");
+    } catch {
+      // Stay on the form if the session cannot be read.
+    }
+  }
+
+  const error =
+    params.error === "db"
+      ? t(locale, "login.db")
+      : params.error === "uselab"
+        ? t(locale, "login.useLab")
+        : params.error === "usecompany"
+          ? t(locale, "login.useCompany")
+          : params.error === "1"
+            ? t(locale, "login.error")
+            : "";
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-black px-4">
-      <form
-        action={loginAction}
-        className="bg-neutral-900 border border-neutral-800 rounded-lg p-8 w-full max-w-sm"
-      >
-        <h1 className="font-display text-xl text-amber-400 uppercase tracking-wide mb-6 text-center">
-          WTB Admin
-        </h1>
-        {params.error && (
-          <p className="text-red-400 text-sm mb-4 text-center">
-            Incorrect password — try again.
-          </p>
-        )}
-        <label className="block mb-5">
-          <span className="text-sm text-neutral-400">Password</span>
-          <input
-            type="password"
-            name="password"
-            autoFocus
-            className="mt-1 w-full bg-black border border-neutral-700 rounded-md px-3 py-2 text-sm text-neutral-100 focus:outline-none focus:border-amber-500"
-          />
-        </label>
-        <button
-          type="submit"
-          className="w-full bg-amber-500 text-black font-medium px-4 py-2 rounded-md hover:bg-amber-400 transition"
-        >
-          Log in
-        </button>
-      </form>
+    <div className="min-h-screen">
+      <header className="max-w-3xl mx-auto w-full px-6 py-5 flex items-center justify-between">
+        <HarborMark />
+        <Preferences
+          locale={locale}
+          theme={theme}
+          languageLabel={t(locale, "common.language")}
+          themeLightLabel={t(locale, "common.themeToLight")}
+          themeDarkLabel={t(locale, "common.themeToDark")}
+        />
+      </header>
+      <main className="max-w-3xl mx-auto px-6 pb-16">
+        <h1 className="font-display text-4xl text-neutral-100 mb-2">{t(locale, "login.title")}</h1>
+        <p className="text-neutral-400 mb-6 max-w-xl">{t(locale, "login.lede")}</p>
+        {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
+
+        <AccountLogin
+          accountLabel={t(locale, "login.account")}
+          companyLabel={t(locale, "login.companyOption")}
+          profileLabel={t(locale, "login.profileOption")}
+          emailLabel={t(locale, "login.email")}
+          usernameLabel={t(locale, "login.username")}
+          passwordLabel={t(locale, "login.password")}
+          submitLabel={t(locale, "login.submit")}
+        />
+
+        <div className="mt-6 flex flex-wrap gap-4 text-sm">
+          <Link href="/login/forgot" className="text-amber-400 hover:underline">
+            {t(locale, "login.forgot")}
+          </Link>
+          <Link href="/join" className="text-amber-400 hover:underline">
+            {t(locale, "login.join")}
+          </Link>
+          <span className="text-neutral-500">{t(locale, "login.joinHint")}</span>
+        </div>
+      </main>
     </div>
   );
 }
