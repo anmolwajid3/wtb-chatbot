@@ -1,6 +1,6 @@
-# Harbor — matching workspace
+# Opas — matching workspace
 
-Harbor is a general matching application. Coaching firms, universities, and other service companies can adopt it and shape the profiles to their own work. **GPT Lab** operates the platform.
+Opas is a general matching application. Coaching firms, universities, and other service companies can adopt it and shape the profiles to their own work. **GPT Lab** operates the platform.
 
 - **`backend/`** — Python/FastAPI/LangGraph assistant
 - **`admin-panel/`** — Next.js workspace (companies, people, profiles, voice, phrases, rules)
