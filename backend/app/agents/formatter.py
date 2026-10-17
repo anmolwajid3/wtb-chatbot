@@ -10,6 +10,11 @@ anything because it is never given anything to invent from.
 """
 import re
 from app.agents.guardrail_check import visitor_advice_rule
+from app.agents.grounding import (
+    compose_match_reply,
+    compose_no_match_reply,
+    reply_is_grounded,
+)
 from app.llm import get_llm
 from app.db.connection import fetch_coaches_by_ids, fetch_match_settings, get_agent_prompt
 
@@ -126,6 +131,14 @@ def run_formatter(state: dict) -> dict:
             coach["match_score"] = scores.get(str(coach["id"]))
     matching_was_attempted = bool(state.get("ready_to_match"))
 
+    # Grounded template first — this is the anti-drift baseline. An LLM polish
+    # is kept only when it still passes the same checklist.
+    grounded = (
+        compose_match_reply(coaches, slots)
+        if coaches
+        else compose_no_match_reply()
+    )
+
     slots = state.get("gathered_slots", {})
     required_fields = {"theme": "the theme/topic", "need_description": "more detail on the need", "timing": "timing"}
     still_missing = [label for field, label in required_fields.items() if not slots.get(field)]
@@ -152,12 +165,21 @@ def run_formatter(state: dict) -> dict:
     prompt += (
         "\n\nNEVER give medical or legal advice. If the visitor asked for either, "
         "refuse in one sentence and then continue with the coaching conversation."
+        "\nYou MUST keep every coach_name from the verified list above in your reply."
+        "\nIf the coach list is empty, do not invent a coach or program name."
     )
     if settings["show_match_score"] and coaches:
         prompt += "\nWhen you name a profile, include its match_score as a percentage."
 
-    llm = get_llm(temperature=0.4, agent_name="formatter", organization_id=state.get("organization_id"))
-    response = llm.invoke([{"role": "system", "content": prompt}])
+    try:
+        llm = get_llm(temperature=0.2, agent_name="formatter", organization_id=state.get("organization_id"))
+        response = llm.invoke([{"role": "system", "content": prompt}])
+        polished = (response.content or "").strip()
+    except Exception:
+        polished = ""
 
-    state["draft_reply"] = response.content
+    if polished and reply_is_grounded(polished, coaches, matching_was_attempted):
+        state["draft_reply"] = polished
+    else:
+        state["draft_reply"] = grounded
     return state
