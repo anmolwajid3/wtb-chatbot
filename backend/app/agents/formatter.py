@@ -88,7 +88,10 @@ def follow_up_reply(slots: dict, latest_user: str) -> str | None:
             return "I can't talk about price until I know the fit. What's going on with the team?"
         return "What's going on, in your own words?"
     if not slots.get("timing"):
-        return "That gives me a real picture. When would you want this to start?"
+        # Keep this short and varied only by context — avoid a stock "gives me a picture" line.
+        if slots.get("theme"):
+            return f"Got it — {slots['theme'][:60].rstrip('.')}. When would you want this to start?"
+        return "When would you want this to start?"
     return None
 
 

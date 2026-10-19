@@ -11,7 +11,6 @@ can render a scannable card rather than a wall of text.
 import json
 from pydantic import BaseModel, Field
 from app.llm import get_llm
-from app.db.connection import save_quote_request
 from app.db.connection import save_quote_request, get_agent_prompt
 
 
@@ -58,9 +57,28 @@ def run_summarizer(state: dict) -> dict:
         prompt = SUMMARY_SYSTEM_PROMPT_DEFAULT.format(conversation=conversation_text)
     result: QuoteSummary = structured_llm.invoke([{"role": "system", "content": prompt}])
 
+    slots = state.get("gathered_slots") or {}
+    contact_email = slots.get("contact") or ""
+    contact_name = slots.get("contact_name") or ""
+    if contact_name and contact_email:
+        contact_info = f"{contact_name} <{contact_email}>"
+    else:
+        contact_info = contact_email or contact_name or (result.contact_info or "")
+
+    details = list(result.key_details or [])
+    for label, key in (
+        ("Group size", "group_size"),
+        ("Timing", "timing"),
+        ("Format", "delivery_format"),
+        ("Schedule", "schedule_note"),
+    ):
+        value = slots.get(key)
+        if value and not any(str(value) in str(item) for item in details):
+            details.append(f"{label}: {value}")
+
     structured_payload = json.dumps({
         "need_summary": result.need_summary,
-        "key_details": result.key_details,
+        "key_details": details,
         "open_questions": result.open_questions,
         "next_step": result.next_step,
     })
@@ -68,7 +86,7 @@ def run_summarizer(state: dict) -> dict:
     save_quote_request(
         conversation_id=state["conversation_id"],
         summary_text=structured_payload,
-        contact_info=result.contact_info or "",
+        contact_info=contact_info,
         is_purchase_order=(outcome == "purchase_order"),
     )
 

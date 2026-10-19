@@ -187,7 +187,13 @@ def save_conversation_state(conversation_id: str, transcript: list, outcome: str
                              matched_coach_ids: list, mood_history: list,
                              organization_id: str | None = None) -> None:
     import json
-    payload = (conversation_id, json.dumps(transcript), outcome, matched_coach_ids, json.dumps(mood_history))
+    # Never persist the "unknown company" sentinel — it is not a real org row and
+    # would fail the FK, previously causing a silent save without organization_id
+    # (so /logs for that company stayed empty).
+    if organization_id == "00000000-0000-0000-0000-000000000000":
+        organization_id = None
+    coach_ids = [str(cid) for cid in (matched_coach_ids or []) if cid]
+    payload = (conversation_id, json.dumps(transcript), outcome, coach_ids, json.dumps(mood_history))
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             try:
@@ -205,7 +211,15 @@ def save_conversation_state(conversation_id: str, transcript: list, outcome: str
                     (*payload, organization_id),
                 )
             except Exception as exc:
-                if "organization_id" not in str(exc):
+                # Only fall back when the column itself is missing (pre-migration DB).
+                # FK / other organization_id errors must surface — swallowing them was
+                # how conversations disappeared from company logs.
+                msg = str(exc).lower()
+                column_missing = (
+                    getattr(exc, "pgcode", None) == "42703"
+                    or ("organization_id" in msg and "does not exist" in msg)
+                )
+                if not column_missing:
                     raise
                 conn.rollback()
                 cur.execute(
@@ -225,6 +239,13 @@ def save_quote_request(conversation_id: str, summary_text: str, contact_info: st
                         is_purchase_order: bool) -> None:
     with get_db_connection() as conn:
         with conn.cursor() as cur:
+            # Ensure upsert works even on DBs created from older schema.sql.
+            cur.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS quote_requests_conversation_id_uidx
+                ON quote_requests (conversation_id)
+                """
+            )
             cur.execute(
                 """
                 INSERT INTO quote_requests (conversation_id, summary_text, contact_info, is_purchase_order)
@@ -416,17 +437,20 @@ def fetch_public_company(slug: str | None) -> dict | None:
 
 
 def resolve_organization_id(slug: str | None) -> str | None:
-    """Maps a company slug to its id. Unknown slugs match nothing.
+    """Maps a company slug to its id. Unknown or blank slugs return None.
     Missing tables (before migration) fall back to an unscoped conversation."""
-    if not slug:
+    if not slug or not str(slug).strip():
         return None
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT id FROM organizations WHERE slug = %s", (slug,))
+                cur.execute("SELECT id FROM organizations WHERE slug = %s", (str(slug).strip(),))
                 row = cur.fetchone()
                 if row:
                     return str(row["id"])
+                # Keep the zero UUID only as an explicit "slug was given but not found"
+                # signal for /diagnose and paused-company checks — callers must not
+                # write it into conversations.organization_id.
                 return "00000000-0000-0000-0000-000000000000"
     except Exception:
         return None

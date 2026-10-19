@@ -114,6 +114,9 @@ CREATE TABLE IF NOT EXISTS quote_requests (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS quote_requests_conversation_id_uidx
+    ON quote_requests (conversation_id);
+
 -- Seed default tone setting and starter guardrails so the system is usable immediately
 INSERT INTO tone_settings (name, description_text)
 VALUES ('default_voice', 'Warm, professional, empathetic coaching-industry tone. Reflects a consultative, human style — never robotic, never pushy.')

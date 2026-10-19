@@ -118,6 +118,7 @@ END $$`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS followup_turns INTEGER NOT NULL DEFAULT 2`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS show_match_score BOOLEAN NOT NULL DEFAULT false`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS logo_url TEXT`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS quote_requests_conversation_id_uidx ON quote_requests (conversation_id)`,
   `CREATE TABLE IF NOT EXISTS profile_sections (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
