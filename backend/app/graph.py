@@ -34,7 +34,7 @@ from app.agents.formatter import run_formatter
 from app.agents.guardrail_check import run_guardrail_check
 from app.agents.response_reviewer import run_response_reviewer
 from app.agents.summarizer import run_summarizer
-from app.db.connection import save_conversation_state, fetch_coaches_by_ids
+from app.db.connection import save_conversation_state, fetch_coaches_by_ids, fetch_match_settings
 
 
 class ChatState(TypedDict):
@@ -51,6 +51,8 @@ class ChatState(TypedDict):
     matched_coach_scores: dict
     coach_selected: bool
     post_selection_turns: int
+    awaiting_optional_details: bool
+    quote_complete: bool
     outcome: str
     draft_reply: str
     guardrail_violated: bool
@@ -214,6 +216,7 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
             "outcome": "in_progress",
             "detected_mood": "neutral",
             "coach_matches": [],
+            "show_match_score": False,
             **_empty_debug_fields(),
         }
 
@@ -228,6 +231,7 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
             "outcome": state.get("outcome", "in_progress"),
             "detected_mood": state.get("detected_mood", "neutral"),
             "coach_matches": [],
+            "show_match_score": False,
             **_empty_debug_fields(),
         }
 
@@ -254,6 +258,8 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
         "content": f"[Selected {coach_name} — {program_name} from the recommendations]",
     })
     state["messages"].append({"role": "assistant", "content": reply})
+    state["awaiting_optional_details"] = False
+    state["quote_complete"] = False
     _conversations_in_memory[conversation_id] = state
 
     save_conversation_state(
@@ -271,6 +277,7 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
         "outcome": state["outcome"],
         "detected_mood": state.get("detected_mood", "neutral"),
         "coach_matches": [],
+        "show_match_score": False,
         **_empty_debug_fields(),
     }
 
@@ -282,6 +289,69 @@ _SCHEDULE = re.compile(
     r"\b(monday|tuesday|wednesday|thursday|friday|schedule|morning|evening|calendar)\b",
     re.I,
 )
+_FAREWELL = re.compile(
+    r"\b(thanks|thank you|thx|bye|goodbye|good bye|cheers|that'?s all|all good|have a (good|nice) day)\b",
+    re.I,
+)
+_GROUP_SIZE = re.compile(
+    r"\b(?:about|around|roughly|approximately)?\s*(\d{1,4})\s*(?:people|persons|person|members)\b",
+    re.I,
+)
+_NAME_PATTERNS = (
+    re.compile(r"\bmy name is\s+([A-Za-z][A-Za-z .'-]{1,60})", re.I),
+    re.compile(r"\bi(?:'| a)?m\s+([A-Za-z][A-Za-z .'-]{1,60})", re.I),
+    re.compile(r"\b([A-Za-z][A-Za-z .'-]{1,60})\s+is my name\b", re.I),
+)
+
+
+def _normalize_format(word: str) -> str:
+    word = word.lower().replace("-", " ")
+    if word in {"distributed", "virtual", "online"}:
+        return "remote"
+    return word
+
+
+def _extract_name(message: str) -> str | None:
+    cleaned = " ".join(message.split())
+    for pattern in _NAME_PATTERNS:
+        match = pattern.search(cleaned)
+        if not match:
+            continue
+        name = match.group(1).strip(" .,!")
+        # Drop trailing "and my email..." tails that name capture can pick up.
+        name = re.split(r"\s+\band\b\s+", name, maxsplit=1, flags=re.I)[0].strip()
+        if "@" in name or len(name) < 2:
+            continue
+        return name[:80]
+    return None
+
+
+def _absorb_optional_details(state: dict, message: str) -> None:
+    """Persist optional fit details from free text into slots so later turns remember them."""
+    slots = dict(state.get("gathered_slots") or {})
+    found_format = _FORMAT.search(message)
+    if found_format and not slots.get("delivery_format"):
+        slots["delivery_format"] = _normalize_format(found_format.group(0))
+    found_size = _GROUP_SIZE.search(message)
+    if found_size and not slots.get("group_size"):
+        slots["group_size"] = int(found_size.group(1))
+    if _SCHEDULE.search(message) and not slots.get("schedule_note"):
+        slots["schedule_note"] = " ".join(message.split())[:120]
+    name = _extract_name(message)
+    if name and not slots.get("contact_name"):
+        slots["contact_name"] = name
+    email = _EMAIL.search(message)
+    if email:
+        slots["contact"] = email.group(0)
+    state["gathered_slots"] = slots
+
+
+def _contact_label(slots: dict) -> str:
+    email = slots.get("contact") or ""
+    name = slots.get("contact_name") or ""
+    if name and email:
+        return f"{name} ({email})"
+    return email or name
 
 
 def _known_fit_facts(state: dict) -> list[str]:
@@ -291,11 +361,17 @@ def _known_fit_facts(state: dict) -> list[str]:
     if slots.get("group_size"):
         facts.append(f"about {slots['group_size']} people")
     if slots.get("timing"):
-        facts.append(f"starting {slots['timing']}")
-    found_format = _FORMAT.search(need)
-    if found_format:
-        word = found_format.group(0).lower().replace("-", " ")
-        facts.append("remote" if word in {"distributed", "virtual", "online"} else word)
+        timing = str(slots["timing"]).strip()
+        facts.append(f"start {timing}" if re.match(r"^(in|next|this|within)\b", timing, re.I) else f"starting {timing}")
+    delivery = slots.get("delivery_format")
+    if not delivery:
+        found_format = _FORMAT.search(need)
+        if found_format:
+            delivery = _normalize_format(found_format.group(0))
+    if delivery:
+        facts.append(delivery)
+    if slots.get("schedule_note"):
+        facts.append(slots["schedule_note"])
     return facts
 
 
@@ -303,7 +379,7 @@ def _known_fit_sentence(state: dict) -> str:
     facts = _known_fit_facts(state)
     if not facts:
         return ""
-    return " I already have " + ", ".join(facts) + "."
+    return " I've already noted: " + ", ".join(facts) + "."
 
 
 def _missing_optional_details(state: dict) -> list[str]:
@@ -312,9 +388,9 @@ def _missing_optional_details(state: dict) -> list[str]:
     missing = []
     if not slots.get("group_size"):
         missing.append("roughly how many people")
-    if not _FORMAT.search(need):
+    if not slots.get("delivery_format") and not _FORMAT.search(need):
         missing.append("whether in-person, remote, or hybrid works best")
-    if not _SCHEDULE.search(need):
+    if not slots.get("schedule_note") and not _SCHEDULE.search(need):
         missing.append("any day or time to work around")
     return missing
 
@@ -327,45 +403,77 @@ def _selected_coach(state: dict) -> dict:
     return rows[0] if rows else {}
 
 
+def _has_contact(state: dict) -> bool:
+    return bool((state.get("gathered_slots") or {}).get("contact"))
+
+
 def _selection_reply(state: dict, message: str) -> tuple[str, str]:
     """Answer the message in front of us. Returns the reply and stay, ask, or close."""
     coach = _selected_coach(state)
     name = coach.get("coach_name") or "that coach"
     program = coach.get("program_name") or "the program"
+    _absorb_optional_details(state, message)
+    slots = state.get("gathered_slots") or {}
     known = _known_fit_sentence(state)
+    contact = _contact_label(slots)
+
+    if state.get("quote_complete"):
+        if _FAREWELL.search(message) or len(message.split()) <= 6:
+            return (
+                f"You're welcome — the team has what they need for {name}'s {program} "
+                f"and will follow up{' at ' + slots.get('contact') if slots.get('contact') else ''}."
+            ), "done"
+        return (
+            f"You're all set for {name}'s {program}. "
+            f"The team will follow up{' at ' + slots.get('contact') if slots.get('contact') else ' shortly'}."
+        ), "done"
 
     if _PRICE_ASK.search(message):
-        already = (state.get("gathered_slots") or {}).get("contact")
-        if already:
+        if contact:
             return (
                 f"I can't tell you what {name} charges for {program}. "
-                f"The team will include the quote when they write to {already}.{known}"
+                f"The team will include the quote when they write to {contact}."
             ), "stay"
         return (
             f"I can't tell you what {name} charges for {program}. "
-            f"The team puts the number in the quote, so I still need your name and email.{known}"
+            f"The team puts the number in the quote, so I still need your name and email."
         ), "stay"
 
-    email = _EMAIL.search(message)
-    if email:
-        slots = dict(state.get("gathered_slots") or {})
-        slots["contact"] = email.group(0)
-        state["gathered_slots"] = slots
-        missing = _missing_optional_details(state)
-        if not missing:
-            facts = ", ".join(_known_fit_facts(state)) or "what you described"
+    if _has_contact(state):
+        # Contact already captured — never re-ask for name/email.
+        if state.get("awaiting_optional_details"):
+            return _closing_reply(state, message), "close"
+        if _FAREWELL.search(message):
             return (
-                f"Thank you. I'll send {name}'s {program} to the team with {facts}. "
-                f"They'll follow up at {email.group(0)}."
-            ), "close"
-        if len(missing) == 1:
-            ask = missing[0]
-        else:
-            ask = ", ".join(missing[:-1]) + ", and " + missing[-1]
+                f"You're welcome. The team will follow up on {name}'s {program}"
+                f"{' at ' + slots.get('contact') if slots.get('contact') else ''}."
+            ), "close" if not state.get("quote_complete") else "done"
+        missing = _missing_optional_details(state)
+        if missing and not state.get("quote_complete"):
+            ask = missing[0] if len(missing) == 1 else ", ".join(missing[:-1]) + ", and " + missing[-1]
+            thanks = (
+                f"Thank you{', ' + slots['contact_name'] if slots.get('contact_name') else ''}. "
+                f"I'll use {contact} for the follow-up on {program}."
+                if _EMAIL.search(message)
+                else (
+                    f"Thanks{', ' + slots['contact_name'] if slots.get('contact_name') else ''}. "
+                    f"I already have {contact} for the follow-up on {program}."
+                )
+            )
+            return (
+                f"{thanks}{known} If you have it, {ask}? Skipping that is fine."
+            ), "ask"
+        facts = ", ".join(_known_fit_facts(state)) or "what you described"
         return (
-            f"Thank you. I'll use {email.group(0)} for the follow-up on {program}.{known} "
-            f"If you have it, {ask}? Skipping that is fine."
-        ), "ask"
+            f"Thank you. I'll send {name}'s {program} to the team with {facts}. "
+            f"They'll follow up at {slots.get('contact')}."
+        ), "close"
+
+    if slots.get("contact_name") and not slots.get("contact"):
+        return (
+            f"Thanks, {slots['contact_name']}. I still need an email address "
+            f"so the team can follow up on {name}'s {program}."
+        ), "stay"
 
     lowered = message.lower()
     if coach.get("duration") and re.search(r"\b(how long|duration|weeks|length)\b", lowered):
@@ -373,14 +481,22 @@ def _selection_reply(state: dict, message: str) -> tuple[str, str]:
             f"{program} with {name} runs {coach['duration']}.{known} "
             f"I still need your name and email before the team can follow up."
         ), "stay"
-    if coach.get("delivery_format") and re.search(r"\b(remote|hybrid|format|online|in person|in-person)\b", lowered):
+    if coach.get("delivery_format") and re.search(
+        r"\b(remote|hybrid|format|online|in person|in-person)\b", lowered
+    ):
         return (
             f"{name} delivers {program} as {coach['delivery_format']}.{known} "
             f"I still need your name and email before the team can follow up."
         ), "stay"
 
+    if _FAREWELL.search(message):
+        return (
+            f"Before I wrap up, I still need your name and email so the team can "
+            f"follow up on {name}'s {program}."
+        ), "stay"
+
     return (
-        f"I still need your name and email so the team can follow up on {name}'s {program}.{known}"
+        f"I still need your name and email so the team can follow up on {name}'s {program}."
     ), "stay"
 
 
@@ -388,9 +504,11 @@ def _closing_reply(state: dict, message: str) -> str:
     coach = _selected_coach(state)
     name = coach.get("coach_name") or "the coach"
     program = coach.get("program_name") or "the program"
+    _absorb_optional_details(state, message)
     note = " ".join(message.split())
     if len(note) > 160:
         note = note[:160].rstrip() + "..."
+    contact = _contact_label(state.get("gathered_slots") or {})
     if _PRICE_ASK.search(message):
         return (
             f"I can't tell you what {name} charges for {program}. "
@@ -398,13 +516,20 @@ def _closing_reply(state: dict, message: str) -> str:
         )
     if re.fullmatch(r"(skip|no|nothing|nope|n/a|none)[.!]?", note, re.I):
         facts = ", ".join(_known_fit_facts(state))
-        extra = f" I already have {facts}." if facts else ""
+        extra = f" I've already noted: {facts}." if facts else ""
+        follow = f" They'll write to {contact}." if contact else " They'll be in touch."
+        return f"No problem.{extra} I'll send {name}'s {program} to the team.{follow}"
+    if _FAREWELL.search(message) and _has_contact(state):
+        follow = f" at {state['gathered_slots'].get('contact')}" if state.get("gathered_slots", {}).get("contact") else ""
         return (
-            f"No problem.{extra} I'll send {name}'s {program} to the team and they'll be in touch."
+            f"You're welcome. I'll send {name}'s {program} to the team and they'll follow up{follow}."
         )
+    facts = ", ".join(_known_fit_facts(state))
+    detail = facts or note
+    follow = f" at {state['gathered_slots'].get('contact')}" if state.get("gathered_slots", {}).get("contact") else ""
     return (
-        f"I'll pass that along with {name}'s {program}: {note}. "
-        f"The team will follow up with the quote and next steps."
+        f"I'll pass that along with {name}'s {program}: {detail}. "
+        f"The team will follow up with the quote and next steps{follow}."
     )
 
 
@@ -427,15 +552,20 @@ def _handle_post_selection_message(conversation_id: str, message: str) -> dict:
     state = _conversations_in_memory[conversation_id]
     state["messages"].append({"role": "user", "content": message})
 
-    if _PRICE_ASK.search(message) or _EMAIL.search(message) or not state.get("awaiting_optional_details"):
+    if state.get("quote_complete"):
         reply, mode = _selection_reply(state, message)
-    else:
+    elif state.get("awaiting_optional_details") and not _EMAIL.search(message) and not _PRICE_ASK.search(message):
         reply, mode = _closing_reply(state, message), "close"
+    else:
+        reply, mode = _selection_reply(state, message)
 
     if mode == "ask":
         state["awaiting_optional_details"] = True
     if mode == "close":
         state = run_summarizer(state)
+        state["awaiting_optional_details"] = False
+        state["quote_complete"] = True
+    if mode == "done":
         state["awaiting_optional_details"] = False
 
     state["messages"].append({"role": "assistant", "content": reply})
@@ -457,6 +587,7 @@ def _handle_post_selection_message(conversation_id: str, message: str) -> dict:
         "outcome": state["outcome"],
         "detected_mood": state.get("detected_mood", "neutral"),
         "coach_matches": [],
+        "show_match_score": False,
         **_empty_debug_fields(),
     }
 
@@ -480,6 +611,7 @@ def run_turn(
                 "outcome": "in_progress",
                 "detected_mood": "neutral",
                 "coach_matches": [],
+                "show_match_score": False,
                 **_empty_debug_fields(),
             }
         return _handle_coach_selection(conversation_id, selected_coach_id)
@@ -503,6 +635,8 @@ def run_turn(
             "matched_coach_scores": {},
             "coach_selected": False,
             "post_selection_turns": 0,
+            "awaiting_optional_details": False,
+            "quote_complete": False,
             "outcome": "in_progress",
             "draft_reply": "",
             "guardrail_violated": False,
@@ -547,14 +681,22 @@ def run_turn(
     # and recommendation cards. This is deliberately assembled fresh here, from
     # the already-verified matched_coaches IDs — never from anything the LLM
     # wrote directly — so the same anti-hallucination guarantee applies here too.
+    settings = fetch_match_settings(result_state.get("organization_id"))
+    min_score = int(settings["min_match_score"])
+    show_score = bool(settings["show_match_score"])
     coach_matches = []
     matched_ids = result_state.get("matched_coaches", [])
     if matched_ids:
         scores = result_state.get("matched_coach_scores", {})
         coach_records = fetch_coaches_by_ids(matched_ids)
+        kept_ids = []
         for c in coach_records:
             coach_id = str(c.get("id"))
+            score = int(scores.get(coach_id, 0) or 0)
+            if score < min_score:
+                continue
             image_urls = c.get("image_urls") or []
+            kept_ids.append(coach_id)
             coach_matches.append({
                 "coach_id": coach_id,
                 "coach_name": c.get("coach_name"),
@@ -565,9 +707,17 @@ def run_turn(
                 "delivery_format": c.get("delivery_format"),
                 "duration": c.get("duration"),
                 "image_url": image_urls[0] if image_urls else None,
-                "match_score": scores.get(coach_id, 50),
+                "match_score": score if show_score else None,
             })
-        coach_matches.sort(key=lambda m: m["match_score"], reverse=True)
+        coach_matches.sort(key=lambda m: m["match_score"] or 0, reverse=True)
+        # Keep state aligned with what the visitor actually saw.
+        if kept_ids != matched_ids:
+            result_state["matched_coaches"] = kept_ids
+            result_state["matched_coach_scores"] = {
+                cid: scores[cid] for cid in kept_ids if cid in scores
+            }
+            if not kept_ids and result_state.get("outcome") == "matched":
+                result_state["outcome"] = "purchase_order"
 
     return {
         "conversation_id": conversation_id,
@@ -575,6 +725,7 @@ def run_turn(
         "outcome": result_state["outcome"],
         "detected_mood": result_state["detected_mood"],
         "coach_matches": coach_matches,
+        "show_match_score": show_score,
         # --- TEMPORARY DEBUG FIELDS — remove once slot-filling behavior is confirmed correct ---
         "debug_turn_count": result_state.get("turn_count", 0),
         "debug_gathered_slots": result_state.get("gathered_slots", {}),
@@ -585,5 +736,5 @@ def run_turn(
         "debug_review_issues": result_state.get("review_issues", []),
         "debug_safety_loop_count": result_state.get("safety_loop_count", 0),
         "debug_safety_fallback_used": result_state.get("safety_fallback_used", False),
-         "debug_off_topic_detected": result_state.get("off_topic_this_turn", False),
+        "debug_off_topic_detected": result_state.get("off_topic_this_turn", False),
     }

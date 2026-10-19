@@ -41,6 +41,7 @@ class ChatResponse(BaseModel):
     outcome: str
     detected_mood: str
     coach_matches: list[dict]
+    show_match_score: bool = False
     debug_turn_count: int
     debug_gathered_slots: dict
     debug_ready_to_match: bool
@@ -66,12 +67,18 @@ def chat(request: ChatRequest) -> ChatResponse:
     organization_id = resolve_organization_id(request.organization_slug)
     status = fetch_organization_status(organization_id) if organization_id else "active"
     if status in {"archived", "held", "removed", "missing"} and request.organization_slug:
+        reply = (
+            "That company was not found. Check the ?company=slug on the widget."
+            if status == "missing"
+            else "This company's assistant is paused. Nothing was removed, and your message was not stored as a new match."
+        )
         return ChatResponse(
             conversation_id=request.conversation_id or "",
-            reply="This company's assistant is paused. Nothing was removed, and your message was not stored as a new match.",
+            reply=reply,
             outcome="in_progress",
             detected_mood="neutral",
             coach_matches=[],
+            show_match_score=False,
             debug_turn_count=0,
             debug_gathered_slots={},
             debug_ready_to_match=False,
@@ -90,6 +97,7 @@ def chat(request: ChatRequest) -> ChatResponse:
             outcome="in_progress",
             detected_mood="neutral",
             coach_matches=[],
+            show_match_score=False,
             debug_turn_count=0,
             debug_gathered_slots={},
             debug_ready_to_match=False,

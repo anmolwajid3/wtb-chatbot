@@ -45,11 +45,15 @@ export default async function LogsPage() {
     return (
       <div className="max-w-3xl mx-auto p-8">
         <h1 className="font-display text-2xl text-neutral-100 mb-2">Conversation logs</h1>
-        <p className="text-sm text-neutral-400">Open a company to see its conversations. Logs are kept per company.</p>
+        <p className="text-sm text-neutral-400">
+          Open a company from Companies first. Logs are kept per company, so GPT Lab must enter
+          that company&apos;s workspace before conversations appear here.
+        </p>
       </div>
     );
   }
   const conversations = await getConversations(organizationId);
+  const slug = workspace?.organization?.slug;
 
   return (
     <div className="max-w-5xl mx-auto p-8">
@@ -57,8 +61,15 @@ export default async function LogsPage() {
         Conversation Logs
       </h1>
       <p className="text-sm text-neutral-400 mb-6">
-        Every conversation the bot has had, kept for review — including which coaches were
+        Every conversation the bot has had for this company — including which coaches were
         matched and whether a quote request was compiled.
+        {slug ? (
+          <>
+            {" "}
+            Visitors must use <code className="text-neutral-300">?company={slug}</code> on the
+            widget, or chats will not show up here.
+          </>
+        ) : null}
       </p>
 
       <div className="bg-neutral-900 rounded-lg border border-neutral-800 overflow-hidden">
@@ -98,7 +109,16 @@ export default async function LogsPage() {
             {conversations.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-neutral-600">
-                  No conversations yet.
+                  No conversations yet
+                  {slug ? (
+                    <>
+                      . Start the backend, open the widget with{" "}
+                      <code className="text-neutral-400">?company={slug}</code>, and send a
+                      message — then refresh this page.
+                    </>
+                  ) : (
+                    "."
+                  )}
                 </td>
               </tr>
             )}

@@ -726,6 +726,7 @@
   function copy() { return COPY[locale]; }
 
   let companyBrand = null;
+  let showMatchScore = false;
 
   function applyChrome() {
     const text = copy();
@@ -953,17 +954,20 @@ async function showGreeting() {
 
     coachMatches.forEach((coach, i) => {
       const coachY = topPadding + i * nodeSpacing;
-      const score = Math.max(0, Math.min(100, Math.round(coach.match_score || 0)));
-      const hex = scoreTierHex(score);
-      const markerIdx = colorToMarkerIndex[hex];
+      const hasScore = showMatchScore && coach.match_score != null && coach.match_score !== '';
+      const score = hasScore ? Math.max(0, Math.min(100, Math.round(coach.match_score || 0))) : 0;
+      const hex = hasScore ? scoreTierHex(score) : '#EFA33B';
+      const markerIdx = colorToMarkerIndex[hex] != null ? colorToMarkerIndex[hex] : 1;
       const midX = (userX + coachX) / 2;
       const midY = (userY + coachY) / 2;
 
       lines += '<line x1="' + userX + '" y1="' + userY + '" x2="' + (coachX - nodeRadius - 6) + '" y2="' + coachY +
         '" stroke="' + hex + '" stroke-width="2" marker-end="url(#graph-arrow-' + markerIdx + ')" />';
 
-      labels += '<text x="' + midX + '" y="' + (midY - 9) + '" fill="' + hex + '" font-size="11" font-weight="600" ' +
-        'text-anchor="middle" font-family="Inter, sans-serif">' + score + '% match</text>';
+      if (hasScore) {
+        labels += '<text x="' + midX + '" y="' + (midY - 9) + '" fill="' + hex + '" font-size="11" font-weight="600" ' +
+          'text-anchor="middle" font-family="Inter, sans-serif">' + score + '% match</text>';
+      }
 
       let nodeVisual;
       if (coach.image_url) {
@@ -1033,8 +1037,16 @@ async function showGreeting() {
         avatarHtml = '<div class="coach-avatar-placeholder">' + initial + '</div>';
       }
 
-      const score = Math.max(0, Math.min(100, Math.round(coach.match_score || 0)));
-      const color = scoreTierColor(score);
+      const hasScore = showMatchScore && coach.match_score != null && coach.match_score !== '';
+      const score = hasScore ? Math.max(0, Math.min(100, Math.round(coach.match_score || 0))) : 0;
+      const color = hasScore ? scoreTierColor(score) : 'var(--amber)';
+
+      const matchRow = hasScore
+        ? ('<div class="match-row">' +
+            '<div class="match-bar-track"><div class="match-bar-fill" style="width:' + score + '%; background:' + color + '"></div></div>' +
+            '<span class="match-score-label">' + score + '% match</span>' +
+          '</div>')
+        : '';
 
       card.innerHTML =
         avatarHtml +
@@ -1044,10 +1056,7 @@ async function showGreeting() {
             '<span class="coach-program"></span>' +
           '</div>' +
           '<p class="coach-desc"></p>' +
-          '<div class="match-row">' +
-            '<div class="match-bar-track"><div class="match-bar-fill" style="width:' + score + '%; background:' + color + '"></div></div>' +
-            '<span class="match-score-label">' + score + '% match</span>' +
-          '</div>' +
+          matchRow +
         '</div>';
 
       card.querySelector('.coach-name').textContent = coach.coach_name || '';
@@ -1111,6 +1120,7 @@ async function showGreeting() {
 
       const data = await response.json();
       conversationId = data.conversation_id;
+      showMatchScore = Boolean(data.show_match_score);
       removeThinkingIndicator();
       addBotMessage(data.reply);
       currentCoachMatches = data.coach_matches || [];
@@ -1164,11 +1174,16 @@ async function showGreeting() {
       detailMeta.appendChild(span);
     });
 
-    const score = Math.max(0, Math.min(100, Math.round(coach.match_score || 0)));
-    const color = scoreTierColor(score);
-    detailMatchRow.innerHTML =
-      '<div class="match-bar-track"><div class="match-bar-fill" style="width:' + score + '%; background:' + color + '"></div></div>' +
-      '<span class="match-score-label">' + score + '% match</span>';
+    const hasScore = showMatchScore && coach.match_score != null && coach.match_score !== '';
+    if (hasScore) {
+      const score = Math.max(0, Math.min(100, Math.round(coach.match_score || 0)));
+      const color = scoreTierColor(score);
+      detailMatchRow.innerHTML =
+        '<div class="match-bar-track"><div class="match-bar-fill" style="width:' + score + '%; background:' + color + '"></div></div>' +
+        '<span class="match-score-label">' + score + '% match</span>';
+    } else {
+      detailMatchRow.innerHTML = '';
+    }
 
     detailSelectBtn.disabled = false;
     detailSelectBtn.textContent = copy().select;
