@@ -31,7 +31,7 @@ export default async function LlmSettingsPage() {
   if (!organizationId) {
     return (
       <div className="max-w-3xl mx-auto p-8">
-        <h1 className="font-display text-2xl text-neutral-100 mb-2">Model</h1>
+        <h1 className="font-display text-2xl text-neutral-100 mb-2">Model selection</h1>
         <p className="text-sm text-neutral-400">Open a company to set its model, spend window, and usage.</p>
       </div>
     );
@@ -83,7 +83,7 @@ export default async function LlmSettingsPage() {
   return (
     <div className="max-w-5xl mx-auto p-8">
       <h1 className="font-display text-2xl font-semibold text-amber-400 uppercase tracking-wide mb-2">
-        LLM Settings
+        Model selection
       </h1>
       <p className="text-sm text-neutral-400 mb-3">
         This company&apos;s model and spend are separate from every other company. Changes apply on the next conversation.

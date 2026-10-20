@@ -10,21 +10,21 @@ async function requireOrgAdmin() {
   const workspace = await getWorkspace();
   if (!workspace) redirect("/login");
   if (workspace.session.role !== "super_admin" && workspace.session.role !== "org_admin") redirect("/home");
-  if (!workspace.organization) redirect("/members?need=1");
+  if (!workspace.organization) redirect("/users?need=1");
   return workspace;
 }
 
 export async function addMember(formData: FormData) {
   const workspace = await requireOrgAdmin();
   const organization = workspace.organization;
-  if (!organization) redirect("/members?need=1");
+  if (!organization) redirect("/users?need=1");
 
   const name = String(formData.get("name") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "");
   const requested = String(formData.get("role") || "viewer");
   const role = ["viewer", "analyst", "editor", "org_admin"].includes(requested) ? requested : "viewer";
-  if (!name || !email || password.length < 6) redirect("/members?error=1");
+  if (!name || !email || password.length < 6) redirect("/users?error=1");
 
   const pool = getPool();
   try {
@@ -35,8 +35,9 @@ export async function addMember(formData: FormData) {
       [organization.id, email, name, passwordHash, role]
     );
   } catch {
-    redirect("/members?error=taken");
+    redirect("/users?error=taken");
   }
+  revalidatePath("/users");
   revalidatePath("/members");
 }
 
@@ -51,5 +52,6 @@ export async function removeMember(formData: FormData) {
     `DELETE FROM users WHERE id = $1 AND organization_id = $2 AND role <> 'super_admin'`,
     [id, organization.id]
   );
+  revalidatePath("/users");
   revalidatePath("/members");
 }

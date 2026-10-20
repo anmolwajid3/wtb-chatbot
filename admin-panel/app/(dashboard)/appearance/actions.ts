@@ -27,5 +27,6 @@ export async function saveAppearance(formData: FormData) {
     [safeLang, safeTheme, accent, workspace.organization.id]
   );
   revalidatePath("/appearance");
+  revalidatePath("/settings");
   revalidatePath("/home");
 }

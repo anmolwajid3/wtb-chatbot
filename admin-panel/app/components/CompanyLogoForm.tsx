@@ -28,9 +28,9 @@ export function CompanyLogoForm({
       <div className="flex flex-wrap items-center gap-4">
         {logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={logoUrl} alt="" className="h-14 w-14 rounded-md object-cover bg-white" />
+          <img src={logoUrl} alt="" className="h-16 w-auto max-w-[10rem] rounded-md object-contain bg-white p-1" />
         ) : (
-          <div className="h-14 w-14 rounded-md bg-neutral-800 border border-neutral-700" />
+          <div className="h-16 w-16 rounded-md bg-neutral-800 border border-neutral-700" />
         )}
         <form action={saveAction} className="flex flex-wrap items-center gap-3">
           <input type="hidden" name="organization_id" value={organizationId} />
