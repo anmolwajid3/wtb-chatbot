@@ -138,12 +138,41 @@ def _still_needs_the_agent(text: str, found_timing: str | None, slots: dict) -> 
     return False
 
 
+def _is_obvious_spam(text: str) -> bool:
+    """Cheap promo/abuse screen so spam never becomes a coaching 'theme'."""
+    if not text:
+        return False
+    if re.search(
+        r"(?:"
+        r"osta\s+nyt|buy\s+now|shop\s+now|order\s+now|"
+        r"click\s+here|klikkaa\s+(?:tästä|tasta)|klicka\s+här|"
+        r"alennus\s*\d|\d+\s*%\s*(?:off|alennus|rabatt)|"
+        r"limited\s+time\s+offer|act\s+now|make\s+money\s+fast|"
+        r"crypto\s+invest|viagra|cialis|nigerian\s+prince"
+        r")",
+        text,
+        re.I,
+    ):
+        return True
+    # Promo blasts often mix discounts with shouty punctuation.
+    if text.count("!") >= 2 and re.search(
+        r"\d+\s*%|alennus|discount|sale|gratis|free\b|rabatt", text, re.I
+    ):
+        return True
+    return False
+
+
 def _looks_like_a_situation(text: str) -> bool:
-    """A real description of a need, not a short price question."""
-    words = re.findall(r"[A-Za-z']+", text)
+    """A real description of a need, not a short price question or promo spam."""
+    if _is_obvious_spam(text):
+        return False
+    # Include Finnish/Swedish letters (ä ö å) so word counts are real.
+    words = re.findall(r"[A-Za-zÄÖÅäöå']+", text)
     if len(words) < 6:
         return False
-    if re.search(r"\b(price|pricing|cost|how much|fee|fees)\b", text, re.I) and len(words) < 14:
+    if re.search(
+        r"\b(price|pricing|cost|how much|fee|fees|hinta|maksaa|pris)\b", text, re.I
+    ) and len(words) < 14:
         return False
     return True
 
@@ -182,6 +211,13 @@ def run_intent_router(state: dict) -> dict:
         state["guardrail_which_rule"] = blocked_rule
         state["gathered_slots"] = slots
         # Boundary turns (medical/legal) do NOT count toward warm-up / matching.
+        state["ready_to_match"] = False
+        return state
+
+    # Promo spam must never become theme/need via the local shortcut.
+    if _is_obvious_spam(latest_message):
+        state["outcome"] = "spam"
+        state["gathered_slots"] = slots
         state["ready_to_match"] = False
         return state
 

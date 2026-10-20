@@ -58,6 +58,22 @@ def test_finnish_timing_phrase_extracted():
     assert _group_size("Tiimimme on demotivoitunut, noin 12 henkilöä.") == 12
 
 
+def test_finnish_promo_is_obvious_spam_not_a_situation():
+    from app.agents.intent_router import _is_obvious_spam, _looks_like_a_situation
+
+    spam = "Osta nyt!!! alennus 50% klikkaa tästä"
+    assert _is_obvious_spam(spam) is True
+    assert _looks_like_a_situation(spam) is False
+
+
+def test_real_finnish_team_need_still_looks_like_situation():
+    from app.agents.intent_router import _is_obvious_spam, _looks_like_a_situation
+
+    text = "Tiimimme on demotivoitunut ja energia on matala palavereissa."
+    assert _is_obvious_spam(text) is False
+    assert _looks_like_a_situation(text) is True
+
+
 def test_finnish_timing_unlocks_follow_up():
     slots = {
         "theme": "team motivation",
