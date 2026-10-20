@@ -67,7 +67,7 @@ export async function saveCompanyLogo(
   const ext = TYPES[file.type];
   if (!ext) {
     return {
-      error: "Unsupported format. Use PNG, JPEG, WebP, or GIF (not HEIC/iPhone Live Photo).",
+      error: "Tiedostomuotoa ei tueta.",
     };
   }
   if (file.size > MAX_BYTES) {

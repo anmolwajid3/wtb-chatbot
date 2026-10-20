@@ -94,7 +94,7 @@ export default async function CoachesPage({
 
       <form method="get" className="mb-4 flex flex-wrap items-end gap-3">
         <label className="text-xs text-neutral-500">
-          {locale === "fi" ? "Haku" : locale === "sv" ? "Sök" : "Search"}
+          {locale === "fi" ? "Haku" : "Search"}
           <input
             name="q"
             defaultValue={q}

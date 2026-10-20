@@ -1,46 +1,47 @@
--- Example phrases for what-the-business (positive / negative / neutral).
--- Run in Supabase SQL editor. Clean natural lines only — no test markers.
+-- Esimerkkifraasit (suomi). Suorita Supabase SQL -editorissa.
 
 DELETE FROM example_phrases
-WHERE organization_id = (SELECT id FROM organizations WHERE slug = 'what-the-business');
+WHERE organization_id IN (
+  SELECT id FROM organizations WHERE slug IN ('what-the-business', 'wtb')
+);
 
 INSERT INTO example_phrases (situation_type, phrase_text, is_active, organization_id)
-SELECT 'negative', $$I hear you - carrying a tired team is heavy, and we can find steady support.$$, true, id
-FROM organizations WHERE slug = 'what-the-business';
+SELECT 'negative', $$Kuulen sinua — väsynyt tiimi painaa, ja voimme etsiä siihen rauhallista tukea.$$, true, id
+FROM organizations WHERE slug IN ('what-the-business', 'wtb');
 
 INSERT INTO example_phrases (situation_type, phrase_text, is_active, organization_id)
-SELECT 'negative', $$That sounds draining. Let's take this one clear step at a time.$$, true, id
-FROM organizations WHERE slug = 'what-the-business';
+SELECT 'negative', $$Kuulostaa uuvuttavalta. Otetaan tämä yksi selkeä askel kerrallaan.$$, true, id
+FROM organizations WHERE slug IN ('what-the-business', 'wtb');
 
 INSERT INTO example_phrases (situation_type, phrase_text, is_active, organization_id)
-SELECT 'negative', $$You're not alone in this; many teams hit a low-energy stretch like this.$$, true, id
-FROM organizations WHERE slug = 'what-the-business';
+SELECT 'negative', $$Et ole tässä yksin; moni tiimi osuu matalan energian jaksoon.$$, true, id
+FROM organizations WHERE slug IN ('what-the-business', 'wtb');
 
 INSERT INTO example_phrases (situation_type, phrase_text, is_active, organization_id)
-SELECT 'positive', $$Love the energy - let's channel that into the right coaching fit.$$, true, id
-FROM organizations WHERE slug = 'what-the-business';
+SELECT 'positive', $$Mahtavaa energiaa — kanavoidaan se oikeaan valmennusosuumaan.$$, true, id
+FROM organizations WHERE slug IN ('what-the-business', 'wtb');
 
 INSERT INTO example_phrases (situation_type, phrase_text, is_active, organization_id)
-SELECT 'positive', $$Exciting direction! We can match that momentum to a strong program.$$, true, id
-FROM organizations WHERE slug = 'what-the-business';
+SELECT 'positive', $$Hieno suunta! Voidaan yhdistää tuo vauhti vahvaan ohjelmaan.$$, true, id
+FROM organizations WHERE slug IN ('what-the-business', 'wtb');
 
 INSERT INTO example_phrases (situation_type, phrase_text, is_active, organization_id)
-SELECT 'positive', $$Great to hear you're ready to invest in the team - that openness helps a lot.$$, true, id
-FROM organizations WHERE slug = 'what-the-business';
+SELECT 'positive', $$Hienoa, että olette valmiita panostamaan tiimiin — se avoimuus auttaa.$$, true, id
+FROM organizations WHERE slug IN ('what-the-business', 'wtb');
 
 INSERT INTO example_phrases (situation_type, phrase_text, is_active, organization_id)
-SELECT 'neutral', $$Understood. A couple of practical details will help me point you well.$$, true, id
-FROM organizations WHERE slug = 'what-the-business';
+SELECT 'neutral', $$Selvä. Pari käytännön yksityiskohtaa auttaa ohjaamaan oikein.$$, true, id
+FROM organizations WHERE slug IN ('what-the-business', 'wtb');
 
 INSERT INTO example_phrases (situation_type, phrase_text, is_active, organization_id)
-SELECT 'neutral', $$Clear picture so far. Next I'll narrow the options that fit.$$, true, id
-FROM organizations WHERE slug = 'what-the-business';
+SELECT 'neutral', $$Kuva on tähän asti selkeä. Seuraavaksi rajaan sopivat vaihtoehdot.$$, true, id
+FROM organizations WHERE slug IN ('what-the-business', 'wtb');
 
 INSERT INTO example_phrases (situation_type, phrase_text, is_active, organization_id)
-SELECT 'neutral', $$Noted. We can keep this straightforward and focused on fit.$$, true, id
-FROM organizations WHERE slug = 'what-the-business';
+SELECT 'neutral', $$Merkattu. Voidaan pitää tämä suoraviivaisena ja keskittyä sopivuuteen.$$, true, id
+FROM organizations WHERE slug IN ('what-the-business', 'wtb');
 
 SELECT situation_type, phrase_text
 FROM example_phrases
-WHERE organization_id = (SELECT id FROM organizations WHERE slug = 'what-the-business')
+WHERE organization_id IN (SELECT id FROM organizations WHERE slug IN ('what-the-business', 'wtb'))
 ORDER BY situation_type, phrase_text;

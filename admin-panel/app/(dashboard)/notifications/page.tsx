@@ -23,14 +23,7 @@ export default async function NotificationsPage() {
           empty: "Ei ilmoituksia.",
           from: "GPT Lab",
         }
-      : locale === "sv"
-        ? {
-            title: "Aviseringar",
-            lede: "Meddelanden från GPT Lab till det här företaget.",
-            empty: "Inga aviseringar.",
-            from: "GPT Lab",
-          }
-        : {
+       : {
             title: "Notifications",
             lede: "Notes from GPT Lab for this company.",
             empty: "No notifications yet.",

@@ -58,8 +58,8 @@ export default async function ProfileStructurePage({
     grouped.set(name, [...(grouped.get(name) || []), field]);
   }
 
-  const disabledLabel = locale === "fi" ? "Poissa käytöstä" : locale === "sv" ? "Inaktiverad" : "Disabled";
-  const restoreLabel = locale === "fi" ? "Palauta" : locale === "sv" ? "Återställ" : "Restore";
+  const disabledLabel = locale === "fi" ? "Poissa käytöstä" : "Disabled";
+  const restoreLabel = locale === "fi" ? "Palauta" : "Restore";
 
   return (
     <div className="max-w-3xl mx-auto p-8">

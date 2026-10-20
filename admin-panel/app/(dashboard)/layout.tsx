@@ -32,29 +32,29 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const companyLinks: SideNavItem[] = [
     { href: "/home", label: t(locale, "nav.home"), icon: "home" },
     { href: "/coaches", label: people, icon: "coaches" },
-    { href: "/logs", label: locale === "fi" ? "Keskustelut" : locale === "sv" ? "Samtal" : "Conversations", icon: "chat" },
+    { href: "/logs", label: locale === "fi" ? "Keskustelut" : "Conversations", icon: "chat" },
     { href: "/queries", label: t(locale, "nav.inbox"), icon: "inbox" },
     {
       href: "/chatbot",
-      label: locale === "fi" ? "Chatbot" : locale === "sv" ? "Chatbot" : "Chatbot",
+      label: locale === "fi" ? "Chatbot" : "Chatbot",
       icon: "voice",
       show: canEditCompany(session.role) || canManageCompany(session.role),
     },
     {
       href: "/users",
-      label: locale === "fi" ? "Käyttäjähallinta" : locale === "sv" ? "Användarhantering" : "User management",
+      label: locale === "fi" ? "Käyttäjähallinta" : "User management",
       icon: "users",
       show: canManageCompany(session.role),
     },
     {
       href: "/broadcasts",
-      label: locale === "fi" ? "Tiedotteet tiimille" : locale === "sv" ? "Teammeddelanden" : "Team broadcasts",
+      label: locale === "fi" ? "Tiedotteet tiimille" : "Team broadcasts",
       icon: "broadcast",
       show: canManageCompany(session.role),
     },
     {
       href: "/settings",
-      label: locale === "fi" ? "Asetukset" : locale === "sv" ? "Inställningar" : "Settings",
+      label: locale === "fi" ? "Asetukset" : "Settings",
       icon: "settings",
       show: canManageCompany(session.role) || canAnalyze(session.role) || canEditCompany(session.role),
     },
@@ -62,7 +62,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const platformLinks: SideNavItem[] = [
     { href: "/companies", label: t(locale, "nav.companies"), icon: "home" },
-    { href: "/notices", label: locale === "fi" ? "Alustatiedotteet" : locale === "sv" ? "Plattformsnotiser" : "Platform notices", icon: "broadcast" },
+    { href: "/notices", label: locale === "fi" ? "Alustatiedotteet" : "Platform notices", icon: "broadcast" },
   ];
 
   const links = inCompany ? companyLinks : platformLinks;
@@ -136,8 +136,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
           userEmail={session.email}
           noticeCount={noticeCount}
           logoutLabel={t(locale, "nav.logout")}
-          profileLabel={locale === "fi" ? "Profiili" : locale === "sv" ? "Profil" : "Profile"}
-          noticesLabel={locale === "fi" ? "Ilmoitukset" : locale === "sv" ? "Aviseringar" : "Notifications"}
+          profileLabel={locale === "fi" ? "Profiili" : "Profile"}
+          noticesLabel={locale === "fi" ? "Ilmoitukset" : "Notifications"}
         />
         <main className="min-w-0 flex-1">{children}</main>
       </div>

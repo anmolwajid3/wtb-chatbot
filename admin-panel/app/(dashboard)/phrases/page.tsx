@@ -4,6 +4,7 @@ import { getWorkspace, requireOrganization } from "@/lib/workspace";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { Breadcrumbs } from "../../components/Breadcrumbs";
+import { getLocale } from "@/lib/i18n";
 import PhraseItem from "./PhraseItem";
 
 export const dynamic = "force-dynamic";
@@ -102,30 +103,32 @@ function MoodColumn({
 export default async function PhrasesPage() {
   const { session, organization } = await requireOrganization();
   if (!canEditCompany(session.role)) redirect("/home");
+  const locale = await getLocale();
   const phrases = await getPhrases(organization.id);
+  const fi = locale === "fi";
 
   return (
     <div className="max-w-6xl mx-auto p-8">
       <Breadcrumbs
         items={[
-          { href: "/home", label: "Home" },
+          { href: "/home", label: fi ? "Koti" : "Home" },
           { href: "/chatbot", label: "Chatbot" },
-          { label: "Example Phrases" },
+          { label: fi ? "Esimerkkifraasit" : "Example Phrases" },
         ]}
       />
       <h1 className="font-display text-2xl font-semibold text-amber-400 uppercase tracking-wide mb-2">
-        Example Phrases
+        {fi ? "Esimerkkifraasit" : "Example Phrases"}
       </h1>
       <p className="text-sm text-neutral-400 mb-6">
-        These belong to {organization.name}. They seed phrasing for each detected mood. The bot re-assesses
-        mood on every turn — these phrases guide tone, they aren&apos;t copied verbatim every time.
-        Click the pencil on any phrase to edit it in place.
+        {fi
+          ? `Nämä kuuluvat yritykselle ${organization.name}. Ne ohjaavat sävyä kullekin tunnistetulle tunnelmalle. Botti arvioi tunnelman joka vuorolla — fraaseja ei kopioida sellaisenaan joka kerta.`
+          : `These belong to ${organization.name}. They seed phrasing for each detected mood. The bot re-assesses mood on every turn — these phrases guide tone, they aren't copied verbatim every time.`}
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <MoodColumn title="Positive" situationType="positive" phrases={phrases} />
-        <MoodColumn title="Negative" situationType="negative" phrases={phrases} />
-        <MoodColumn title="Neutral" situationType="neutral" phrases={phrases} />
+        <MoodColumn title={fi ? "Positiivinen" : "Positive"} situationType="positive" phrases={phrases} />
+        <MoodColumn title={fi ? "Negatiivinen" : "Negative"} situationType="negative" phrases={phrases} />
+        <MoodColumn title={fi ? "Neutraali" : "Neutral"} situationType="neutral" phrases={phrases} />
       </div>
     </div>
   );

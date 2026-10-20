@@ -36,23 +36,7 @@ export default async function ProfilePage({
           match: "Salasanat eivät täsmää.",
           taken: "Sähköposti on jo käytössä.",
         }
-      : locale === "sv"
-        ? {
-            title: "Profil",
-            lede: "Uppdatera namn, e-post eller lösenord.",
-            name: "Namn",
-            email: "E-post",
-            password: "Nytt lösenord",
-            confirm: "Bekräfta lösenord",
-            passwordHint: "Lämna tomt om du inte byter lösenord.",
-            save: "Spara",
-            saved: "Profilen sparades.",
-            err1: "Namn och e-post krävs.",
-            short: "Lösenordet måste vara minst 8 tecken.",
-            match: "Lösenorden matchar inte.",
-            taken: "E-postadressen används redan.",
-          }
-        : {
+       : {
             title: "Profile",
             lede: "Update your name, email, or password.",
             name: "Name",

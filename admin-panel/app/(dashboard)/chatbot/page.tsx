@@ -18,79 +18,65 @@ export default async function ChatbotHubPage() {
     canEditCompany(session.role) && {
       href: "/tone",
       icon: "voice",
-      title: locale === "fi" ? "Ääni" : locale === "sv" ? "Röst" : "Voice",
+      title: locale === "fi" ? "Ääni" : "Voice",
       desc:
         locale === "fi"
           ? "Botin perussävy."
-          : locale === "sv"
-            ? "Assistentens grundton."
-            : "The assistant’s steady way of speaking.",
+           : "The assistant’s steady way of speaking.",
     },
     canEditCompany(session.role) && {
       href: "/phrases",
       icon: "chat",
-      title: locale === "fi" ? "Fraasit" : locale === "sv" ? "Fraser" : "Phrases",
+      title: locale === "fi" ? "Fraasit" : "Phrases",
       desc:
         locale === "fi"
           ? "Esimerkkilauseet eri tunnelmille."
-          : locale === "sv"
-            ? "Exempelfraser för olika stämningar."
-            : "Example lines for different moods.",
+           : "Example lines for different moods.",
     },
     canEditCompany(session.role) && {
       href: "/guardrails",
       icon: "rules",
-      title: locale === "fi" ? "Säännöt" : locale === "sv" ? "Regler" : "Rules",
+      title: locale === "fi" ? "Säännöt" : "Rules",
       desc:
         locale === "fi"
           ? "Mitä botti ei saa sanoa."
-          : locale === "sv"
-            ? "Vad assistenten aldrig får säga."
-            : "What the assistant must never say.",
+           : "What the assistant must never say.",
     },
     canEditCompany(session.role) && {
       href: "/greetings",
       icon: "broadcast",
-      title: locale === "fi" ? "Tervehdykset" : locale === "sv" ? "Hälsningar" : "Greetings",
+      title: locale === "fi" ? "Tervehdykset" : "Greetings",
       desc:
         locale === "fi"
           ? "Chatin avausviesti."
-          : locale === "sv"
-            ? "Öppningsraden i chatten."
-            : "The opening line visitors hear.",
+           : "The opening line visitors hear.",
     },
     canEditCompany(session.role) && {
       href: "/profile-structure",
       icon: "coaches",
-      title: locale === "fi" ? `${person}-kentät` : locale === "sv" ? `${person}-fält` : `${person} fields`,
+      title: locale === "fi" ? `${person}-kentät` : `${person} fields`,
       desc:
         locale === "fi"
           ? "Profiililomakkeen kysymykset."
-          : locale === "sv"
-            ? "Frågorna på varje profil."
-            : "Questions on each profile.",
+           : "Questions on each profile.",
     },
     canManageCompany(session.role) && {
       href: "/matching",
       icon: "matching",
-      title: locale === "fi" ? "Sovitus" : locale === "sv" ? "Matchning" : "Matching",
+      title: locale === "fi" ? "Sovitus" : "Matching",
       desc:
         locale === "fi"
           ? "Kuinka monta ehdotusta ja milloin."
-          : locale === "sv"
-            ? "Hur många förslag och när."
-            : "How many suggestions and when to show them.",
+           : "How many suggestions and when to show them.",
     },
     canEditCompany(session.role) && {
       href: "/master-prompts",
       icon: "settings",
-      title: locale === "fi" ? "Kehotteet" : locale === "sv" ? "Prompter" : "Prompts",
+      title: locale === "fi" ? "Kehotteet" : "Prompts",
       desc:
         locale === "fi"
           ? "Edistyneet järjestelmäkehotteet."
-          : locale === "sv"
-            ? "Avancerade systemprompter."
-            : "Advanced system prompts.",
+           : "Advanced system prompts.",
     },
   ].filter(Boolean) as { href: string; icon: string; title: string; desc: string }[];
 
@@ -103,14 +89,12 @@ export default async function ChatbotHubPage() {
         ]}
       />
       <h1 className="font-display mb-2 text-3xl text-neutral-100">
-        {locale === "fi" ? "Chatbot" : locale === "sv" ? "Chatbot" : "Chatbot"}
+        {locale === "fi" ? "Chatbot" : "Chatbot"}
       </h1>
       <p className="mb-8 text-neutral-400">
         {locale === "fi"
           ? `Miten ${organization.name}-avustaja puhuu ja ehdottaa profiileja.`
-          : locale === "sv"
-            ? `Hur ${organization.name}-assistenten talar och föreslår profiler.`
-            : `How ${organization.name}’s assistant speaks and suggests profiles.`}
+           : `How ${organization.name}’s assistant speaks and suggests profiles.`}
       </p>
       <div className="grid gap-3">
         {items.map((item) => (

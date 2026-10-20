@@ -29,13 +29,7 @@ def _detect_message_locale(text: str) -> str | None:
         lower,
     ):
         # Swedish also uses å/ä/ö — prefer FI when clear Finnish function words appear.
-        if re.search(r"\b(och|jag|vi|teamet|kostar|hej|tack|vill)\b", lower) and not re.search(
-            r"\b(mitä|tiimi|haluaisimme|paljonko|kuukauden)\b", lower
-        ):
-            return "sv"
         return "fi"
-    if re.search(r"\b(och|jag|vi|teamet|kostar|hej|tack)\b", lower):
-        return "sv"
     return None
 
 
@@ -130,19 +124,22 @@ def chat(request: ChatRequest) -> ChatResponse:
         )
     chat_settings = fetch_company_chat_settings(organization_id)
     forced = (chat_settings.get("reply_language") or "auto").lower()
-    visitor_locale = (request.locale or "en").lower()
-    if forced in {"en", "fi", "sv"}:
+    if forced == "sv":
+        forced = "fi"
+    visitor_locale = (request.locale or "fi").lower()
+    if visitor_locale == "sv":
+        visitor_locale = "fi"
+    if forced in {"en", "fi"}:
         reply_locale = forced
     else:
-        # Auto: prefer the visitor toggle, but if they write in Finnish/Swedish
-        # reply in that language even when the UI toggle is still English.
+        # Auto: prefer the visitor toggle; Finnish writing wins even if UI is English.
         detected = _detect_message_locale(request.message or "")
         if detected:
             reply_locale = detected
-        elif visitor_locale in {"en", "fi", "sv"}:
+        elif visitor_locale in {"en", "fi"}:
             reply_locale = visitor_locale
         else:
-            reply_locale = "en"
+            reply_locale = "fi"
 
     result = run_turn(
         request.conversation_id,
@@ -173,10 +170,15 @@ def greeting(organization_slug: str | None = None, locale: str | None = None):
     organization_id = resolve_organization_id(organization_slug)
     chat_settings = fetch_company_chat_settings(organization_id)
     forced = (chat_settings.get("reply_language") or "auto").lower()
-    if forced in {"en", "fi", "sv"}:
+    if forced == "sv":
+        forced = "fi"
+    incoming = (locale or "fi").lower()
+    if incoming == "sv":
+        incoming = "fi"
+    if forced in {"en", "fi"}:
         reply_locale = forced
-    elif (locale or "").lower() in {"en", "fi", "sv"}:
-        reply_locale = locale.lower()  # type: ignore[union-attr]
+    elif incoming in {"en", "fi"}:
+        reply_locale = incoming
     else:
-        reply_locale = "en"
+        reply_locale = "fi"
     return {"greeting": fetch_random_greeting(organization_id, reply_locale), "locale": reply_locale}

@@ -7,7 +7,6 @@ import type { Locale } from "@/lib/i18n";
 const LOCALES: { id: Locale; label: string }[] = [
   { id: "fi", label: "FI" },
   { id: "en", label: "EN" },
-  { id: "sv", label: "SV" },
 ];
 
 export function Preferences({

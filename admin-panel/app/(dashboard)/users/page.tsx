@@ -63,14 +63,12 @@ export default async function UsersPage({
     )
   ).rows;
 
-  const title = locale === "fi" ? "Käyttäjähallinta" : locale === "sv" ? "Användarhantering" : "User management";
-  const adminsTab = locale === "fi" ? "Ylläpitäjät" : locale === "sv" ? "Administratörer" : "Admins";
+  const title = locale === "fi" ? "Käyttäjähallinta" : "User management";
+  const adminsTab = locale === "fi" ? "Ylläpitäjät" : "Admins";
   const coachesTab =
     locale === "fi"
       ? `${organization.profile_label_plural} & pyynnöt`
-      : locale === "sv"
-        ? `${organization.profile_label_plural} & förfrågningar`
-        : `${organization.profile_label_plural} & requests`;
+       : `${organization.profile_label_plural} & requests`;
 
   return (
     <div className="mx-auto max-w-5xl p-8">
@@ -84,9 +82,7 @@ export default async function UsersPage({
       <p className="mb-6 text-neutral-400">
         {locale === "fi"
           ? "Hallitse kirjautuvia ylläpitäjiä ja profiilipyyntöjä yhdessä paikassa."
-          : locale === "sv"
-            ? "Hantera inloggade administratörer och profilförfrågningar på ett ställe."
-            : "Manage signing-in admins and profile join requests in one place."}
+           : "Manage signing-in admins and profile join requests in one place."}
       </p>
 
       <div className="mb-6 flex gap-2 border-b border-neutral-800">
@@ -111,7 +107,7 @@ export default async function UsersPage({
       <form method="get" className="mb-4 flex flex-wrap items-end gap-3">
         <input type="hidden" name="tab" value={tab} />
         <label className="text-xs text-neutral-500">
-          {locale === "fi" ? "Haku" : locale === "sv" ? "Sök" : "Search"}
+          {locale === "fi" ? "Haku" : "Search"}
           <input
             name="q"
             defaultValue={q}
@@ -234,7 +230,7 @@ export default async function UsersPage({
                               {!locked && (
                                 <>
                                   <button type="submit" className="text-sm text-amber-400 hover:underline">
-                                    {locale === "fi" ? "Tallenna" : locale === "sv" ? "Spara" : "Save"}
+                                    {locale === "fi" ? "Tallenna" : "Save"}
                                   </button>
                                   <button
                                     formAction={removeMember}
@@ -265,12 +261,10 @@ export default async function UsersPage({
             <p className="text-sm text-neutral-400">
               {locale === "fi"
                 ? "Hyväksy liittymispyynnöt tai hallitse profiileja."
-                : locale === "sv"
-                  ? "Godkänn förfrågningar eller hantera profiler."
-                  : "Approve join requests or manage profiles."}
+                 : "Approve join requests or manage profiles."}
             </p>
             <Link href="/coaches" className="text-sm text-amber-400 hover:underline">
-              {locale === "fi" ? `Avaa ${organization.profile_label_plural}` : locale === "sv" ? `Öppna ${organization.profile_label_plural}` : `Open ${organization.profile_label_plural}`}
+              {locale === "fi" ? `Avaa ${organization.profile_label_plural}` : `Open ${organization.profile_label_plural}`}
             </Link>
           </div>
           {params.error === "taken" && <p className="mb-4 text-sm text-red-400">{t(locale, "join.taken")}</p>}

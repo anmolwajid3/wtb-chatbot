@@ -68,22 +68,9 @@ Conversation so far:
 {conversation}
 """
 
-_LOCALE_NAME = {"en": "English", "fi": "Finnish", "sv": "Swedish"}
+_LOCALE_NAME = {"fi": "Finnish", "en": "English"}
 
 _COPY = {
-    "en": {
-        "advice": "I can't give medical or legal advice.",
-        "advice_ask_team": "If you want help finding a coach, what's going on with the team?",
-        "advice_ask_timing": "When would you want this to start?",
-        "offtopic": "That's outside what I can help with here.",
-        "price_need_fit": "I can't talk about price until I know the fit. What's going on with the team?",
-        "price_ask_timing": "I can't give prices here — the team sends a quote once we know the fit. When would you want this to start?",
-        "price_quote": "I can't give prices here — the team includes that in the quote when they follow up.",
-        "ask_situation": "What's going on, in your own words?",
-        "ask_timing": "When would you want this to start?",
-        "got_timing": "Got it — {theme}. When would you want this to start?",
-        "one_more": "Before I suggest anyone, is there one more detail about how this is showing up for the team?",
-    },
     "fi": {
         "advice": "En voi antaa lääketieteellistä tai juridista neuvontaa.",
         "advice_ask_team": "Jos etsit valmentajaa, kerro mitä tiimissä tapahtuu?",
@@ -97,18 +84,18 @@ _COPY = {
         "got_timing": "Selvä — {theme}. Milloin tämän olisi hyvä alkaa?",
         "one_more": "Ennen kuin ehdotan ketään, onko vielä yksi yksityiskohta siitä, miten tämä näkyy tiimissä?",
     },
-    "sv": {
-        "advice": "Jag kan inte ge medicinsk eller juridisk rådgivning.",
-        "advice_ask_team": "Om du vill ha hjälp att hitta en coach, vad händer i teamet?",
-        "advice_ask_timing": "När skulle ni vilja att det här startar?",
-        "offtopic": "Det ligger utanför vad jag kan hjälpa till med här.",
-        "price_need_fit": "Jag kan inte prata pris innan jag förstår behovet. Vad händer i teamet?",
-        "price_ask_timing": "Jag kan inte ge priser här — teamet skickar en offert när vi vet rätt match. När skulle ni vilja starta?",
-        "price_quote": "Jag kan inte ge priser här — teamet tar med det i offerten när de hör av sig.",
-        "ask_situation": "Berätta med egna ord vad som pågår?",
-        "ask_timing": "När skulle ni vilja att det här startar?",
-        "got_timing": "Okej — {theme}. När skulle ni vilja starta?",
-        "one_more": "Innan jag föreslår någon, finns det en detalj till om hur det här syns i teamet?",
+    "en": {
+        "advice": "I can't give medical or legal advice.",
+        "advice_ask_team": "If you want help finding a coach, what's going on with the team?",
+        "advice_ask_timing": "When would you want this to start?",
+        "offtopic": "That's outside what I can help with here.",
+        "price_need_fit": "I can't talk about price until I know the fit. What's going on with the team?",
+        "price_ask_timing": "I can't give prices here — the team sends a quote once we know the fit. When would you want this to start?",
+        "price_quote": "I can't give prices here — the team includes that in the quote when they follow up.",
+        "ask_situation": "What's going on, in your own words?",
+        "ask_timing": "When would you want this to start?",
+        "got_timing": "Got it — {theme}. When would you want this to start?",
+        "one_more": "Before I suggest anyone, is there one more detail about how this is showing up for the team?",
     },
 }
 
@@ -119,7 +106,9 @@ def _locale(state: dict | None = None) -> str:
 
 
 def _t(key: str, locale: str, **kwargs) -> str:
-    text = _COPY.get(locale, _COPY["en"]).get(key) or _COPY["en"][key]
+    if locale == "sv":
+        locale = "fi"
+    text = _COPY.get(locale, _COPY["fi"]).get(key) or _COPY["fi"][key]
     return text.format(**kwargs) if kwargs else text
 
 

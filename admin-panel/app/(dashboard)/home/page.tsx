@@ -50,24 +50,7 @@ export default async function HomePage() {
           remaining: "Jäljellä",
           requests: "Odottavat pyynnöt",
         }
-      : locale === "sv"
-        ? {
-            home: "Hem",
-            welcome: `Välkommen, ${session.name.split(" ")[0] || session.name}`,
-            lede: "En snabb överblick.",
-            open: "Öppna",
-            matched: "Matchade",
-            other: "Övriga",
-            outcomes: "Samtal",
-            profiles: people,
-            active: "Aktiva",
-            inactive: "Inaktiva",
-            credits: "Meddelanden denna månad",
-            used: "Använt",
-            remaining: "Kvar",
-            requests: "Väntande förfrågningar",
-          }
-        : {
+       : {
             home: "Home",
             welcome: `Welcome, ${session.name.split(" ")[0] || session.name}`,
             lede: "A quick snapshot of how things are going.",

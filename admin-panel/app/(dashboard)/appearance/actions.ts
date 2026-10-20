@@ -17,7 +17,7 @@ export async function saveAppearance(formData: FormData) {
   let accent = String(formData.get("widget_accent") || "#FFFFFF").trim();
   if (!/^#[0-9A-Fa-f]{6}$/.test(accent)) accent = "#FFFFFF";
 
-  const safeLang = ["auto", "en", "fi", "sv"].includes(replyLanguage) ? replyLanguage : "auto";
+  const safeLang = ["auto", "en", "fi"].includes(replyLanguage) ? replyLanguage : "auto";
   const safeTheme = widgetTheme === "light" ? "light" : "dark";
 
   await getPool().query(

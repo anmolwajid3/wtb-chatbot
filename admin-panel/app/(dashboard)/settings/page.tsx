@@ -29,10 +29,9 @@ export default async function SettingsPage() {
           branding: "Yrityksen logo",
           appearance: "Chatbotin ulkoasu",
           language: "Botin vastauskieli",
-          auto: "Seuraa kävijän kielivalintaa (EN / FI / SV)",
+          auto: "Seuraa kävijän kielivalintaa (FI / EN)",
           alwaysEn: "Aina englanti",
           alwaysFi: "Aina suomi",
-          alwaysSv: "Aina ruotsi",
           languageHint: "Tämä on yrityksen oletuskieli chatbotille.",
           theme: "Väritila",
           dark: "Tumma",
@@ -47,41 +46,15 @@ export default async function SettingsPage() {
           diagnosticsDesc: "Tarkista chatbotin perustoiminnot.",
           advanced: "Lisäasetukset",
         }
-      : locale === "sv"
-        ? {
-            title: "Inställningar",
-            lede: "Varumärke, chatbutseende, språk och modell.",
-            branding: "Företagets logotyp",
-            appearance: "Chatbotens utseende",
-            language: "Botens svarsspråk",
-            auto: "Följ besökarens språkval (EN / FI / SV)",
-            alwaysEn: "Alltid engelska",
-            alwaysFi: "Alltid finska",
-            alwaysSv: "Alltid svenska",
-            languageHint: "Företagets standardspråk för chatbotten.",
-            theme: "Färgläge",
-            dark: "Mörk",
-            light: "Ljus",
-            accent: "Accentfärg",
-            accentHint: "Används för knappar i chatten. Välj er varumärkesfärg.",
-            save: "Spara utseende",
-            open: "Öppna chatbot",
-            model: "Modellval",
-            modelDesc: "Välj LLM-modell och följ användningen.",
-            diagnostics: "Diagnostik",
-            diagnosticsDesc: "Kontrollera chatbotens grundfunktioner.",
-            advanced: "Avancerat",
-          }
-        : {
+       : {
             title: "Settings",
             lede: "Brand, chatbot look, language, and model.",
             branding: "Company logo",
             appearance: "Chatbot appearance",
             language: "Bot reply language",
-            auto: "Follow visitor language toggle (EN / FI / SV)",
+            auto: "Follow visitor language toggle (FI / EN)",
             alwaysEn: "Always English",
             alwaysFi: "Always Finnish",
-            alwaysSv: "Always Swedish",
             languageHint: "Default language for this company’s visitor chatbot.",
             theme: "Color mode",
             dark: "Dark",
@@ -134,9 +107,8 @@ export default async function SettingsPage() {
               {copy.language}
               <select name="reply_language" defaultValue={organization.reply_language || "auto"} className={inputClass}>
                 <option value="auto">{copy.auto}</option>
-                <option value="en">{copy.alwaysEn}</option>
                 <option value="fi">{copy.alwaysFi}</option>
-                <option value="sv">{copy.alwaysSv}</option>
+                <option value="en">{copy.alwaysEn}</option>
               </select>
               <span className="mt-1 block text-xs text-neutral-500">{copy.languageHint}</span>
             </label>

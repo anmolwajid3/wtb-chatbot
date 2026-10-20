@@ -595,9 +595,8 @@
 
 <div class="demo-tools">
   <div role="group" aria-label="Language">
-    <button type="button" data-lang="en">EN</button>
-    <button type="button" data-lang="sv">SV</button>
     <button type="button" data-lang="fi">FI</button>
+    <button type="button" data-lang="en">EN</button>
   </div>
   <button type="button" id="theme-toggle">Light</button>
 </div>
@@ -679,23 +678,6 @@
       themeToLight: 'Light',
       themeToDark: 'Dark',
     },
-    sv: {
-      kicker: 'Opas',
-      title: 'Hitta rätt<br>vägledare för teamet',
-      line1: 'Beskriv situationen med egna ord.',
-      line2: 'Assistenten ställer ett par frågor och pekar mot en passande profil.',
-      note: 'Lägg till ?company=ert-namn för att prata med ett företag.',
-      brand: 'Opas',
-      status: 'Svarar oftast inom några sekunder',
-      placeholder: 'Beskriv vad du letar efter...',
-      select: 'Välj den här',
-      selecting: 'Väljer...',
-      greeting: 'Hej! Berätta lite om vad du letar efter, så hjälper jag dig att hitta rätt.',
-      errorSend: 'Assistenten gick inte att nå just nu. Kontrollera att servern körs och försök igen.',
-      errorSelect: 'Valet gick inte att slutföra just nu. Försök igen.',
-      themeToLight: 'Ljust',
-      themeToDark: 'Mörkt',
-    },
     fi: {
       kicker: 'Opas',
       title: 'Löydä oikea<br>opas tiimille',
@@ -723,7 +705,7 @@
     document.cookie = name + '=' + value + ';path=/;max-age=31536000;samesite=lax';
   }
 
-  let locale = ['en', 'sv', 'fi'].includes(readCookie('harbor_locale')) ? readCookie('harbor_locale') : 'en';
+  let locale = ['fi', 'en'].includes(readCookie('harbor_locale')) ? readCookie('harbor_locale') : (readCookie('harbor_locale') === 'sv' ? 'fi' : 'fi');
   let theme = readCookie('harbor_theme') === 'light' ? 'light' : 'dark';
   document.body.classList.toggle('light', theme === 'light');
 
@@ -741,10 +723,9 @@
     if (companyBrand && label) {
       const titles = {
         en: 'Find the right<br>' + label.toLowerCase(),
-        sv: 'Hitta rätt<br>' + label.toLowerCase(),
         fi: 'Löydä oikea<br>' + label.toLowerCase(),
       };
-      document.getElementById('demo-title').innerHTML = titles[locale] || titles.en;
+      document.getElementById('demo-title').innerHTML = titles[locale] || titles.fi;
       document.getElementById('demo-note').textContent = brandName;
     } else {
       document.getElementById('demo-title').innerHTML = text.title;
@@ -799,7 +780,7 @@
 
   function applyCompanyAppearance(data) {
     if (!data) return;
-    if (data.reply_language && data.reply_language !== 'auto' && ['en', 'sv', 'fi'].includes(data.reply_language)) {
+    if (data.reply_language && data.reply_language !== 'auto' && ['fi', 'en'].includes(data.reply_language)) {
       forcedReplyLanguage = data.reply_language;
       locale = data.reply_language;
       writeCookie('harbor_locale', locale);

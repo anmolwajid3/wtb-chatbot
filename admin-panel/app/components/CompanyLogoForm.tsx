@@ -65,9 +65,6 @@ export function CompanyLogoForm({
           </form>
         )}
       </div>
-      <p className="text-xs text-neutral-500 mt-3">
-        Use PNG, JPEG, WebP, or GIF (max 2 MB). iPhone HEIC photos are not supported — export as JPEG first.
-      </p>
       {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
     </div>
   );

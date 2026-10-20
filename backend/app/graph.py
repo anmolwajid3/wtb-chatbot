@@ -82,16 +82,14 @@ _SPAM_REPLY = {
         "Kiitos yhteydenotosta! Tämä viesti ei näytä liittyvän näihin palveluihin — "
         "jos ymmärsin väärin, kerro uudestaan mitä etsit."
     ),
-    "sv": (
-        "Tack för att du hör av dig! Det här meddelandet verkar inte handla om "
-        "de här tjänsterna — om jag missförstod, beskriv gärna vad du letar efter."
-    ),
 }
 
 
 def _spam_reply_node(state: ChatState) -> ChatState:
-    locale = state.get("reply_locale") or "en"
-    state["final_reply"] = _SPAM_REPLY.get(locale, _SPAM_REPLY["en"])
+    locale = state.get("reply_locale") or "fi"
+    if locale == "sv":
+        locale = "fi"
+    state["final_reply"] = _SPAM_REPLY.get(locale, _SPAM_REPLY["fi"])
     return state
 
 

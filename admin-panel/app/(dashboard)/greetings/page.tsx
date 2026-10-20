@@ -1,5 +1,6 @@
 import { Breadcrumbs } from "../../components/Breadcrumbs";
 import { getPool } from "@/lib/db";
+import { getLocale } from "@/lib/i18n";
 import { canEditCompany } from "@/lib/plans";
 import { requireOrganization } from "@/lib/workspace";
 import { redirect } from "next/navigation";
@@ -14,6 +15,8 @@ type Greeting = { id: string; greeting_text: string; is_active: boolean };
 export default async function GreetingsPage() {
   const { session, organization } = await requireOrganization();
   if (!canEditCompany(session.role)) redirect("/home");
+  const locale = await getLocale();
+  const fi = locale === "fi";
   const organizationId = organization.id;
   const pool = getPool();
   const result = organizationId
@@ -30,20 +33,21 @@ export default async function GreetingsPage() {
     <div className="max-w-4xl mx-auto p-8">
       <Breadcrumbs
         items={[
-          { href: "/home", label: "Home" },
+          { href: "/home", label: fi ? "Koti" : "Home" },
           { href: "/chatbot", label: "Chatbot" },
-          { label: "Opening Greetings" },
+          { label: fi ? "Avaustervehdykset" : "Opening Greetings" },
         ]}
       />
       <div className="flex items-center justify-between mb-2">
         <h1 className="font-display text-2xl font-semibold text-amber-400 uppercase tracking-wide">
-          Opening Greetings
+          {fi ? "Avaustervehdykset" : "Opening Greetings"}
         </h1>
         <AddGreetingForm addGreeting={addGreeting} />
       </div>
       <p className="text-sm text-neutral-400 mb-6">
-        These are {organization.name}&apos;s opening lines. A random active one is shown each time a visitor
-        opens this company&apos;s chat.
+        {fi
+          ? `Nämä ovat yrityksen ${organization.name} avausviestejä. Satunnainen aktiivinen näytetään, kun kävijä avaa chatin.`
+          : `These are ${organization.name}'s opening lines. A random active one is shown each time a visitor opens this company's chat.`}
       </p>
 
       <div className="bg-neutral-900 rounded-lg border border-neutral-800 overflow-hidden">
