@@ -175,7 +175,8 @@ fly secrets set \
   DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@db.YOUR_REF.supabase.co:5432/postgres" \
   SESSION_SECRET="paste-a-long-random-string-here" \
   SUPER_ADMIN_EMAIL="admin@gptlab.dev" \
-  SUPER_ADMIN_PASSWORD="choose-a-strong-password"
+  SUPER_ADMIN_PASSWORD="choose-a-strong-password" \
+  BACKEND_URL="https://opas-api.fly.dev"
 ```
 
 Optional (coach image uploads):
