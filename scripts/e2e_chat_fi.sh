@@ -72,8 +72,9 @@ print(
   "| matches:", len(d.get("coach_matches") or []),
 )
 
-if "used every message" in reply.lower() or "credit" in reply.lower() and "paused" in reply.lower():
-  print("CREDIT LIMIT — raise credits_used/credit_limit for this company in admin, then rerun.")
+if "used every message" in reply.lower() or ("paused" in reply.lower() and "plan" in reply.lower()):
+  print("CREDIT LIMIT — in admin Companies → Reset messages (or set plan to Pro), then rerun.")
+  open(os.environ["CID_OUT"], "w").write("")
   sys.exit(4)
 
 if not re.search(expect, reply, re.I | re.S):
@@ -91,10 +92,16 @@ except Exception as e:
     green "PASS"
     PASS=$((PASS + 1))
   else
+    local rc=$?
     CID=$(cat "$TMPDIR_E2E/cid" 2>/dev/null || true)
     red "FAIL"
     python3 -m json.tool < "$resp_file" 2>/dev/null || cat "$resp_file"
     FAIL=$((FAIL + 1))
+    if [[ "$rc" -eq 4 ]] || grep -qi 'used every message' "$resp_file"; then
+      red "Aborting — message credits exhausted for $COMPANY."
+      bold "Result: ${PASS} passed, ${FAIL} failed"
+      exit 1
+    fi
   fi
   echo
 }

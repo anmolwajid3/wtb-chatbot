@@ -141,3 +141,18 @@ export async function closeCompany() {
   cookieStore.delete(ORG_COOKIE);
   redirect("/companies");
 }
+
+export async function resetMessageCredits(formData: FormData) {
+  const workspace = await getWorkspace();
+  if (!workspace || workspace.session.role !== "super_admin") redirect("/home");
+  const id = String(formData.get("id") || "");
+  if (!id) redirect("/companies");
+  const pool = getPool();
+  await pool.query(
+    `UPDATE organizations
+     SET credits_used = 0, credits_period_start = date_trunc('month', now())
+     WHERE id = $1`,
+    [id]
+  );
+  redirect("/companies");
+}
