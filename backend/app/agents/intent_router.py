@@ -143,13 +143,16 @@ def run_intent_router(state: dict) -> dict:
         state["ready_to_match"] = False
         return state
 
+    # Never treat price or medical/legal asks as the coaching "situation".
+    is_price_ask = _price_question_text(latest_message)
+
     found_timing = _timing_phrase(latest_message)
-    if found_timing and not slots.get("timing"):
+    if found_timing and not slots.get("timing") and not is_price_ask:
         slots["timing"] = found_timing
     found_size = _group_size(latest_message)
-    if found_size and not slots.get("group_size"):
+    if found_size and not slots.get("group_size") and not is_price_ask:
         slots["group_size"] = found_size
-    if _looks_like_a_situation(latest_message):
+    if _looks_like_a_situation(latest_message) and not is_price_ask:
         existing_need = slots.get("need_description") or ""
         if latest_message not in existing_need:
             slots["need_description"] = f"{existing_need} {latest_message}".strip()

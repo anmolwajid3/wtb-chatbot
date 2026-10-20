@@ -26,7 +26,11 @@ PRICE_PATTERN = re.compile(r"[€$£]\s?\d|\d+\s?(eur|euros?|dollars?)\b", re.IG
 ADVICE_REQUEST = re.compile(
     r"\b(?:medic\w*|legal|health)(?:\W+\w+){0,3}\W+(?:advice|advise|adivce|advive)\b"
     r"|\b(?:advice|advise|adivce|advive)(?:\W+\w+){0,3}\W+(?:medic\w*|legal|health)\b"
-    r"|\b(?:diagnos\w*|prescri\w*|medication|dosage|lawsuit)\b",
+    r"|\b(?:diagnos\w*|prescri\w*|medication|dosage|lawsuit|attorney|solicitor|lawyer)\b"
+    # "what does Finnish employment law say…" — legal ask without the word "advice"
+    r"|\b(?:employment|labour|labor|tax|immigration)\s+law\b"
+    r"|\bwhat\s+does\b[\s\S]{0,60}\blaw\b"
+    r"|\blegal\s+(?:advice|opinion|question|rights?)\b",
     re.IGNORECASE,
 )
 

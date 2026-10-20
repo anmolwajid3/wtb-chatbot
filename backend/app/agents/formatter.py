@@ -83,12 +83,24 @@ def boundary_reply(slots: dict, lead: str) -> str:
 def follow_up_reply(slots: dict, latest_user: str) -> str | None:
     """One next question. None means the conversation is ready for a real match."""
     has_situation = bool(slots.get("theme") or slots.get("need_description"))
-    if not has_situation:
-        if _price_question(latest_user):
+
+    # Price questions must never be answered with a timing ask — handle them first.
+    if _price_question(latest_user):
+        if not has_situation:
             return "I can't talk about price until I know the fit. What's going on with the team?"
+        if not slots.get("timing"):
+            return (
+                "I can't give prices here — the team sends a quote once we know the fit. "
+                "When would you want this to start?"
+            )
+        return "I can't give prices here — the team includes that in the quote when they follow up."
+
+    if not has_situation:
         return "What's going on, in your own words?"
     if not slots.get("timing"):
-        return "That gives me a real picture. When would you want this to start?"
+        if slots.get("theme"):
+            return f"Got it — {str(slots['theme'])[:60].rstrip('.')}. When would you want this to start?"
+        return "When would you want this to start?"
     return None
 
 
