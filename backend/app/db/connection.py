@@ -22,7 +22,15 @@ def get_db_connection():
     if not database_url:
         raise RuntimeError("DATABASE_URL must be set in your .env file.")
 
-    conn = psycopg2.connect(database_url, cursor_factory=psycopg2.extras.RealDictCursor)
+    # Supabase requires TLS. Append sslmode if the URI does not already set it.
+    connect_url = database_url
+    if (
+        ("supabase.co" in database_url or "supabase.com" in database_url)
+        and "sslmode=" not in database_url
+    ):
+        connect_url += ("&" if "?" in database_url else "?") + "sslmode=require"
+
+    conn = psycopg2.connect(connect_url, cursor_factory=psycopg2.extras.RealDictCursor)
     try:
         yield conn
         conn.commit()
