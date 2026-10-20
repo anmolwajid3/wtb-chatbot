@@ -118,36 +118,39 @@ echo "$H" | python3 -c "import json,sys; d=json.load(sys.stdin); assert 'mood-ph
   red "Deploy API with mood-phrases-v5 first (need debug_example_phrases)."
 }
 
+# Snippet args are distinctive natural text from seed_example_phrases.sql
+# (proves the right mood's phrases were loaded — not required in the bot reply).
+
 # --- Negative path ---
 CID=""
 chat "neg-open" \
   "Our team feels demotivated and exhausted — I'm honestly frustrated and stuck." \
   "negative" \
-  "PHRASE_NEG_"
+  "carrying a tired team"
 
 chat "neg-timing" \
   "We need help for about 12 people, starting in about a month." \
   "neutral" \
-  "PHRASE_NEU_"
+  "straightforward and focused on fit"
 
 # --- Positive path (fresh conversation) ---
 CID=""
 chat "pos-open" \
   "This is exciting! We're thrilled and really looking forward to finding a great coach." \
   "positive" \
-  "PHRASE_POS_"
+  "Love the energy"
 
 chat "pos-need" \
   "We want team motivation coaching for about 10 people, starting next month." \
   "neutral" \
-  "PHRASE_NEU_"
+  "practical details will help"
 
 # --- Finnish negative (mood words) ---
 CID=""
 chat "fi-neg" \
   "Tiimimme on demotivoitunut ja uupunut, energia on matala." \
   "negative" \
-  "PHRASE_NEG_"
+  "That sounds draining"
 
 echo
 bold "Result: ${PASS} passed, ${FAIL} failed"
@@ -157,4 +160,4 @@ if [[ "$FAIL" -gt 0 ]]; then
 fi
 green "ALL PASSED"
 echo
-echo "Note: phrases guide tone; verbatim PHRASE_* markers in the reply are NOT required."
+echo "Note: phrases guide tone; the bot should not copy them verbatim every time."
