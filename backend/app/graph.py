@@ -198,6 +198,7 @@ def _empty_debug_fields() -> dict:
     return {
         "debug_turn_count": 0,
         "debug_intake_turn_count": 0,
+        "debug_example_phrases": [],
         "debug_gathered_slots": {},
         "debug_ready_to_match": False,
         "debug_off_topic_detected": False,
@@ -602,6 +603,9 @@ def run_turn(
         # --- TEMPORARY DEBUG FIELDS — remove once slot-filling behavior is confirmed correct ---
         "debug_turn_count": result_state.get("turn_count", 0),
         "debug_intake_turn_count": result_state.get("intake_turn_count", 0),
+        "debug_example_phrases": list(
+            (result_state.get("tone_guidance") or {}).get("example_phrases") or []
+        ),
         "debug_gathered_slots": result_state.get("gathered_slots", {}),
         "debug_ready_to_match": result_state.get("ready_to_match", False),
         "debug_guardrail_violated": result_state.get("guardrail_violated", False),

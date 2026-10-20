@@ -68,6 +68,7 @@ class ChatResponse(BaseModel):
     coach_matches: list[dict]
     debug_turn_count: int
     debug_intake_turn_count: int = 0
+    debug_example_phrases: list[str] = []
     debug_gathered_slots: dict
     debug_ready_to_match: bool
     debug_guardrail_violated: bool
@@ -156,7 +157,7 @@ def chat(request: ChatRequest) -> ChatResponse:
 @app.get("/health")
 def health():
     # build marker so you can confirm a redeploy actually landed
-    return {"status": "ok", "build": "spam-local-v4"}
+    return {"status": "ok", "build": "mood-phrases-v5"}
 
 @app.get("/company")
 def company(organization_slug: str | None = None):
