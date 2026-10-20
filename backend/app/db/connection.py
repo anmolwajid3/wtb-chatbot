@@ -354,10 +354,30 @@ def reset_agent_prompt(agent_name: str) -> None:
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM agent_prompts WHERE agent_name = %s", (agent_name,))
-DEFAULT_GREETING = (
-    "Hi! Tell me a bit about what you're looking for — a theme, a situation, "
-    "a team size, whatever comes to mind — and I'll help point you to the right fit."
-)
+DEFAULT_GREETINGS = {
+    "en": [
+        "Hi! Tell me a bit about what you're looking for — a theme, a situation, "
+        "a team size, whatever comes to mind — and I'll help point you to the right fit.",
+        "Hey there! Whatever's going on, a team challenge, a specific goal, or just a rough idea, "
+        "I'm here to help you find the right coach for it.",
+        "Welcome! Tell me a bit about your situation, big or small, and I'll help point you "
+        "toward a coach who genuinely fits.",
+    ],
+    "fi": [
+        "Hei! Kerro vähän, mitä etsit — teema, tilanne, tiimin koko, mikä vaan — niin autan löytämään sopivan valmentajan.",
+        "Terve! Olipa kyse tiimin haasteesta, tietystä tavoitteesta tai vasta raakileesta ideasta, "
+        "autan löytämään siihen oikean valmentajan.",
+        "Tervetuloa! Kerro tilanteestasi, isosta tai pienestä, niin ohjaan sinut valmentajan luo, "
+        "joka sopii teille aidosti.",
+    ],
+    "sv": [
+        "Hej! Berätta lite om vad du letar efter — tema, situation, teamstorlek — så hjälper jag dig hitta rätt coach.",
+        "Hej! Oavsett om det handlar om en teamutmaning, ett mål eller bara en lös idé, "
+        "hjälper jag dig hitta rätt coach.",
+        "Välkommen! Berätta om er situation, stor eller liten, så pekar jag dig mot en coach som passar.",
+    ],
+}
+DEFAULT_GREETING = DEFAULT_GREETINGS["en"][0]
 
 
 def take_message_credit(organization_id: str | None) -> bool:
@@ -487,13 +507,26 @@ def resolve_organization_id(slug: str | None) -> str | None:
         return None
 
 
-def fetch_random_greeting(organization_id: str | None = None) -> str:
+def _default_greeting_for_locale(locale: str | None) -> str:
+    import random
+
+    loc = (locale or "en").lower()
+    if loc not in DEFAULT_GREETINGS:
+        loc = "en"
+    return random.choice(DEFAULT_GREETINGS[loc])
+
+
+def fetch_random_greeting(organization_id: str | None = None, locale: str | None = "en") -> str:
     """
-    Picks one random active greeting for a fresh conversation. Falls back to
-    the original hardcoded default if the table is empty, has no active
-    rows, or the database is unreachable — the widget should never show
-    nothing, or an error, where a greeting is expected.
+    Picks one random active greeting for a fresh conversation.
+    For Finnish/Swedish reply locales, use localized defaults — custom DB
+    greetings are typically English and must not override the company language.
+    Falls back to a hardcoded default if the table is empty or unreachable.
     """
+    loc = (locale or "en").lower()
+    if loc in {"fi", "sv"}:
+        return _default_greeting_for_locale(loc)
+
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -525,4 +558,4 @@ def fetch_random_greeting(organization_id: str | None = None) -> str:
                     return row["greeting_text"]
     except Exception:
         pass
-    return DEFAULT_GREETING
+    return _default_greeting_for_locale(loc)

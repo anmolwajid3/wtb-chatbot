@@ -881,12 +881,13 @@
 
   fullscreenBtn.addEventListener('click', toggleFullscreen);
 
-  const DEFAULT_GREETING = copy().greeting;
-
-async function showGreeting() {
-    let greetingText = DEFAULT_GREETING;
+  async function showGreeting() {
+    let greetingText = copy().greeting;
     try {
-      const greetingUrl = API_URL.replace('/chat', '/greeting') + (companySlug ? ('?organization_slug=' + encodeURIComponent(companySlug)) : '');
+      const params = new URLSearchParams();
+      if (companySlug) params.set('organization_slug', companySlug);
+      params.set('locale', locale);
+      const greetingUrl = API_URL.replace('/chat', '/greeting') + '?' + params.toString();
       const response = await fetch(greetingUrl);
       if (response.ok) {
         const data = await response.json();
@@ -902,13 +903,15 @@ async function showGreeting() {
     addBotMessage(greetingText);
   }
 
-  function openPanel() {
+  async function openPanel() {
     panel.classList.add('open');
     panel.setAttribute('aria-hidden', 'false');
     launcher.setAttribute('aria-expanded', 'true');
     launcher.style.display = 'none';
     if (messagesEl.children.length === 0) {
-      showGreeting();
+      // Wait for company language/theme so the greeting is not stuck in English.
+      await brandReady;
+      await showGreeting();
     }
     input.focus();
   }
@@ -1180,7 +1183,7 @@ async function showGreeting() {
   const detailMatchRow = document.getElementById('coach-detail-match-row');
   const detailSelectBtn = document.getElementById('coach-detail-select-btn');
   applyChrome();
-  loadCompanyBrand();
+  const brandReady = loadCompanyBrand();
 
   let activeDetailCoach = null;
 

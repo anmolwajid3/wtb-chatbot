@@ -155,7 +155,8 @@ def chat(request: ChatRequest) -> ChatResponse:
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    # build marker so you can confirm a redeploy actually landed
+    return {"status": "ok", "build": "fi-legal-greetings-v2"}
 
 @app.get("/company")
 def company(organization_slug: str | None = None):
@@ -166,7 +167,15 @@ def company(organization_slug: str | None = None):
 
 
 @app.get("/greeting")
-def greeting(organization_slug: str | None = None):
+def greeting(organization_slug: str | None = None, locale: str | None = None):
     from app.db.connection import fetch_random_greeting
     organization_id = resolve_organization_id(organization_slug)
-    return {"greeting": fetch_random_greeting(organization_id)}
+    chat_settings = fetch_company_chat_settings(organization_id)
+    forced = (chat_settings.get("reply_language") or "auto").lower()
+    if forced in {"en", "fi", "sv"}:
+        reply_locale = forced
+    elif (locale or "").lower() in {"en", "fi", "sv"}:
+        reply_locale = locale.lower()  # type: ignore[union-attr]
+    else:
+        reply_locale = "en"
+    return {"greeting": fetch_random_greeting(organization_id, reply_locale), "locale": reply_locale}
