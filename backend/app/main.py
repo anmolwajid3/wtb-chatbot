@@ -2,6 +2,8 @@ from dotenv import load_dotenv
 
 load_dotenv()  # must happen before anything reads os.environ, hence first import
 
+import re
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -15,6 +17,27 @@ from app.db.connection import (
     fetch_company_chat_settings,
     take_message_credit,
 )
+
+
+def _detect_message_locale(text: str) -> str | None:
+    """Best-effort locale from the visitor's words (Finnish / Swedish markers)."""
+    if not text:
+        return None
+    lower = text.lower()
+    if re.search(
+        r"[äöå]|(\b(mitä|meidän|tiimi|haluaisimme|paljonko|kerro|kiitos|hei|kuukauden)\b)",
+        lower,
+    ):
+        # Swedish also uses å/ä/ö — prefer FI when clear Finnish function words appear.
+        if re.search(r"\b(och|jag|vi|teamet|kostar|hej|tack|vill)\b", lower) and not re.search(
+            r"\b(mitä|tiimi|haluaisimme|paljonko|kuukauden)\b", lower
+        ):
+            return "sv"
+        return "fi"
+    if re.search(r"\b(och|jag|vi|teamet|kostar|hej|tack)\b", lower):
+        return "sv"
+    return None
+
 
 app = FastAPI(title="Opas")
 
@@ -109,10 +132,16 @@ def chat(request: ChatRequest) -> ChatResponse:
     visitor_locale = (request.locale or "en").lower()
     if forced in {"en", "fi", "sv"}:
         reply_locale = forced
-    elif visitor_locale in {"en", "fi", "sv"}:
-        reply_locale = visitor_locale
     else:
-        reply_locale = "en"
+        # Auto: prefer the visitor toggle, but if they write in Finnish/Swedish
+        # reply in that language even when the UI toggle is still English.
+        detected = _detect_message_locale(request.message or "")
+        if detected:
+            reply_locale = detected
+        elif visitor_locale in {"en", "fi", "sv"}:
+            reply_locale = visitor_locale
+        else:
+            reply_locale = "en"
 
     result = run_turn(
         request.conversation_id,

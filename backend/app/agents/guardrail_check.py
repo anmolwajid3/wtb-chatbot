@@ -23,6 +23,7 @@ PRICE_PATTERN = re.compile(r"[€$£]\s?\d|\d+\s?(eur|euros?|dollars?)\b", re.IG
 
 # Visitor asks, including the common misspelling "adivce". This screens the
 # request itself. The reply check below only sees what the bot is about to send.
+# English + Finnish + Swedish — legal/medical asks must never become a "theme".
 ADVICE_REQUEST = re.compile(
     r"\b(?:medic\w*|legal|health)(?:\W+\w+){0,3}\W+(?:advice|advise|adivce|advive)\b"
     r"|\b(?:advice|advise|adivce|advive)(?:\W+\w+){0,3}\W+(?:medic\w*|legal|health)\b"
@@ -30,7 +31,15 @@ ADVICE_REQUEST = re.compile(
     # "what does Finnish employment law say…" — legal ask without the word "advice"
     r"|\b(?:employment|labour|labor|tax|immigration)\s+law\b"
     r"|\bwhat\s+does\b[\s\S]{0,60}\blaw\b"
-    r"|\blegal\s+(?:advice|opinion|question|rights?)\b",
+    r"|\blegal\s+(?:advice|opinion|question|rights?)\b"
+    # Finnish: työlainsäädäntö / juridinen / lääketieteellinen …
+    r"|työlainsäädänn?ö\w*|työlaki\w*|lainsäädänn?ö\w*"
+    r"|juridista\b|juridisen\b|juridinen\b|oikeudellista\b|oikeudellinen\b"
+    r"|lääketieteellistä\b|lääketieteellinen\b|lääketieteell\w*"
+    r"|lääkärin?\b|diagnoos\w*|resept\w*|asianajaj\w*"
+    r"|mitä\b[\s\S]{0,80}\b(?:laki|lainsäädäntö|työlaki|työlainsäädäntö)\b"
+    # Swedish
+    r"|juridisk\w*|medicinsk\w*|arbetsrätt\w*|lagstiftning\w*",
     re.IGNORECASE,
 )
 

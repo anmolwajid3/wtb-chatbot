@@ -68,7 +68,13 @@ def _clean_message(text: str) -> str:
 
 
 def _price_question_text(text: str) -> bool:
-    return bool(re.search(r"\b(price|pricing|cost|how much|fee|fees)\b", text, re.I))
+    return bool(
+        re.search(
+            r"\b(price|pricing|cost|how much|fee|fees|hinta|hinnoittelu|kustannus|maksaa|pris|kostar)\b",
+            text,
+            re.I,
+        )
+    )
 
 
 def _timing_phrase(text: str) -> str | None:

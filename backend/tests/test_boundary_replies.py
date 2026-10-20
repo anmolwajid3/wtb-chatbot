@@ -24,12 +24,28 @@ def test_employment_law_counts_as_legal_advice_request():
     assert ADVICE_REQUEST.search(text)
 
 
+def test_finnish_employment_law_counts_as_legal_advice_request():
+    text = "Mitä Suomen työlainsäädäntö sanoo naisjohtajuudesta?"
+    assert ADVICE_REQUEST.search(text)
+
+
+def test_finnish_medical_advice_request():
+    text = "Anna lääketieteellistä neuvontaa stressiin."
+    assert ADVICE_REQUEST.search(text)
+
+
 def test_boundary_reply_after_legal_with_no_situation():
     reply = boundary_reply({}, "advice", "en")
     assert "can't give medical or legal advice" in reply.lower()
     assert "team" in reply.lower()
 
 
+def test_finnish_boundary_reply_language():
+    reply = boundary_reply({}, "advice", "fi")
+    assert "lääketieteellistä" in reply.lower() or "juridista" in reply.lower()
+
+
 def test_finnish_follow_up_language():
     reply = follow_up_reply({}, "hei", "fi")
     assert "tiimissä" in reply.lower() or "meneillään" in reply.lower()
+
