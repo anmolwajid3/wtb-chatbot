@@ -79,6 +79,7 @@ export type ProfileField = {
   sort_order: number;
   is_builtin: boolean;
   group_name: string;
+  is_active?: boolean;
 };
 
 export type ProfileSection = {
@@ -98,12 +99,17 @@ export async function listProfileSections(organizationId: string): Promise<Profi
   return result.rows;
 }
 
-export async function listProfileFields(organizationId: string): Promise<ProfileField[]> {
+export async function listProfileFields(
+  organizationId: string,
+  options?: { includeInactive?: boolean }
+): Promise<ProfileField[]> {
   const pool = getPool();
   const result = await pool.query(
-    `SELECT id, field_key, label, field_type, options, required, sort_order, is_builtin, group_name
+    `SELECT id, field_key, label, field_type, options, required, sort_order, is_builtin, group_name,
+            COALESCE(is_active, true) AS is_active
      FROM profile_fields
      WHERE organization_id = $1
+       ${options?.includeInactive ? "" : "AND COALESCE(is_active, true) = true"}
      ORDER BY sort_order ASC, label ASC`,
     [organizationId]
   );

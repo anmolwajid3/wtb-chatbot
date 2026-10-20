@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Breadcrumbs } from "../../components/Breadcrumbs";
 import { NavIcon } from "../../components/NavIcon";
 import { getLocale } from "@/lib/i18n";
 import { canEditCompany, canManageCompany } from "@/lib/plans";
@@ -95,6 +96,12 @@ export default async function ChatbotHubPage() {
 
   return (
     <div className="mx-auto max-w-3xl p-8">
+      <Breadcrumbs
+        items={[
+          { href: "/home", label: locale === "fi" ? "Koti" : "Home" },
+          { label: "Chatbot" },
+        ]}
+      />
       <h1 className="font-display mb-2 text-3xl text-neutral-100">
         {locale === "fi" ? "Chatbot" : locale === "sv" ? "Chatbot" : "Chatbot"}
       </h1>

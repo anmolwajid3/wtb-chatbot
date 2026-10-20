@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Breadcrumbs } from "../../components/Breadcrumbs";
 import { CompanyLogoForm } from "../../components/CompanyLogoForm";
 import { NavIcon } from "../../components/NavIcon";
 import { saveAppearance } from "../appearance/actions";
@@ -99,6 +100,12 @@ export default async function SettingsPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-8 p-8">
       <div>
+        <Breadcrumbs
+          items={[
+            { href: "/home", label: locale === "fi" ? "Koti" : "Home" },
+            { label: copy.title },
+          ]}
+        />
         <h1 className="font-display mb-2 text-3xl text-neutral-100">{copy.title}</h1>
         <p className="text-neutral-400">{copy.lede}</p>
       </div>

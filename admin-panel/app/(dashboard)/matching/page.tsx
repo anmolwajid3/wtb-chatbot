@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Breadcrumbs } from "../../components/Breadcrumbs";
 import { saveMatching } from "./actions";
 import { getLocale } from "@/lib/i18n";
 import { canManageCompany } from "@/lib/plans";
@@ -56,6 +57,13 @@ export default async function MatchingPage() {
 
   return (
     <div className="max-w-xl mx-auto p-8">
+      <Breadcrumbs
+        items={[
+          { href: "/home", label: locale === "fi" ? "Koti" : "Home" },
+          { href: "/chatbot", label: "Chatbot" },
+          { label: text.title },
+        ]}
+      />
       <h1 className="font-display text-3xl text-neutral-100 mb-2">{text.title}</h1>
       <p className="text-neutral-400 mb-6">{text.lede}</p>
       <form action={saveMatching} className="bg-neutral-900 border border-neutral-800 rounded-lg p-5 grid gap-4">

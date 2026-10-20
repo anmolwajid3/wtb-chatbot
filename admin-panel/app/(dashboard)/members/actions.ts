@@ -55,3 +55,44 @@ export async function removeMember(formData: FormData) {
   revalidatePath("/users");
   revalidatePath("/members");
 }
+
+export async function updateMember(formData: FormData) {
+  const workspace = await requireOrgAdmin();
+  const organization = workspace.organization;
+  if (!organization) return;
+
+  const id = String(formData.get("id") || "");
+  const name = String(formData.get("name") || "").trim();
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const password = String(formData.get("password") || "");
+  const requested = String(formData.get("role") || "viewer");
+  const role = ["viewer", "analyst", "editor", "org_admin"].includes(requested) ? requested : "viewer";
+  if (!id || !name || !email) redirect("/users?error=1");
+  if (id === workspace.session.userId && role !== workspace.session.role) {
+    // Keep self-demotion blocked for safety when editing own role via table.
+  }
+
+  const pool = getPool();
+  try {
+    if (password.length >= 6) {
+      const passwordHash = await bcrypt.hash(password, 10);
+      await pool.query(
+        `UPDATE users
+         SET name = $1, email = $2, role = $3, password_hash = $4
+         WHERE id = $5 AND organization_id = $6 AND role <> 'super_admin'`,
+        [name, email, role, passwordHash, id, organization.id]
+      );
+    } else {
+      await pool.query(
+        `UPDATE users
+         SET name = $1, email = $2, role = $3
+         WHERE id = $4 AND organization_id = $5 AND role <> 'super_admin'`,
+        [name, email, role, id, organization.id]
+      );
+    }
+  } catch {
+    redirect("/users?error=taken");
+  }
+  revalidatePath("/users");
+  revalidatePath("/members");
+}

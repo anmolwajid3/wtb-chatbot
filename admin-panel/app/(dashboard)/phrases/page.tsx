@@ -3,6 +3,7 @@ import { assertStaff, canEditCompany } from "@/lib/plans";
 import { getWorkspace, requireOrganization } from "@/lib/workspace";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { Breadcrumbs } from "../../components/Breadcrumbs";
 import PhraseItem from "./PhraseItem";
 
 export const dynamic = "force-dynamic";
@@ -105,6 +106,13 @@ export default async function PhrasesPage() {
 
   return (
     <div className="max-w-6xl mx-auto p-8">
+      <Breadcrumbs
+        items={[
+          { href: "/home", label: "Home" },
+          { href: "/chatbot", label: "Chatbot" },
+          { label: "Example Phrases" },
+        ]}
+      />
       <h1 className="font-display text-2xl font-semibold text-amber-400 uppercase tracking-wide mb-2">
         Example Phrases
       </h1>

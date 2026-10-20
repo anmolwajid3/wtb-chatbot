@@ -189,7 +189,7 @@ const en = {
   fields: {
     title: "{label} fields",
     lede: "Questions on each {label} profile at {name}. Built-in details stay in place so matching keeps working.",
-    later: "An assistant that drafts these fields from a short description is a later idea. It is not part of this release.",
+    later: "",
     label: "Field label",
     type: "Type",
     options: "Dropdown choices",
@@ -415,7 +415,7 @@ const sv: typeof en = {
   fields: {
     title: "{label}-fält",
     lede: "Frågor på varje {label}-profil hos {name}. Inbyggda detaljer finns kvar så att matchningen fungerar.",
-    later: "En assistent som tar fram fälten från en kort beskrivning är en senare idé. Den ingår inte i den här versionen.",
+    later: "",
     label: "Fältets namn",
     type: "Typ",
     options: "Rullgardinsval",
@@ -641,7 +641,7 @@ const fi: typeof en = {
   fields: {
     title: "Kentät: {label}",
     lede: "Kysymykset jokaisessa {label}-profiilissa yrityksessä {name}. Valmiit tiedot jäävät, jotta yhdistäminen toimii.",
-    later: "Avustaja, joka luonnostelee kentät lyhyestä kuvauksesta, on myöhempi ajatus. Se ei kuulu tähän versioon.",
+    later: "",
     label: "Kentän nimi",
     type: "Tyyppi",
     options: "Pudotusvalikon vaihtoehdot",
@@ -687,7 +687,7 @@ const dictionaries = { en, sv, fi };
 export async function getLocale(): Promise<Locale> {
   const value = (await cookies()).get(LOCALE_COOKIE)?.value;
   if (value === "sv" || value === "fi" || value === "en") return value;
-  return "en";
+  return "fi";
 }
 
 export async function getTheme(): Promise<Theme> {

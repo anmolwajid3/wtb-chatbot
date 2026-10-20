@@ -1,3 +1,4 @@
+import { Breadcrumbs } from "../../components/Breadcrumbs";
 import { getPool } from "@/lib/db";
 import { canEditCompany } from "@/lib/plans";
 import { requireOrganization } from "@/lib/workspace";
@@ -27,6 +28,13 @@ export default async function GreetingsPage() {
 
   return (
     <div className="max-w-4xl mx-auto p-8">
+      <Breadcrumbs
+        items={[
+          { href: "/home", label: "Home" },
+          { href: "/chatbot", label: "Chatbot" },
+          { label: "Opening Greetings" },
+        ]}
+      />
       <div className="flex items-center justify-between mb-2">
         <h1 className="font-display text-2xl font-semibold text-amber-400 uppercase tracking-wide">
           Opening Greetings

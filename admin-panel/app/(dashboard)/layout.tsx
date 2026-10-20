@@ -4,19 +4,13 @@ import { redirect } from "next/navigation";
 import { closeCompany } from "./companies/actions";
 import { HeaderBar } from "../components/HeaderBar";
 import { NavIcon } from "../components/NavIcon";
+import { SideNav, type SideNavItem } from "../components/SideNav";
 import { getLocale, getTheme, t } from "@/lib/i18n";
 import { canAnalyze, canEditCompany, canManageCompany } from "@/lib/plans";
 import { getPool } from "@/lib/db";
 import { getWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
-
-type NavItem = {
-  href: string;
-  label: string;
-  icon: string;
-  show?: boolean;
-};
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   let workspace;
@@ -35,7 +29,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const inCompany = Boolean(organization) && !platformPath;
   const people = organization?.profile_label_plural || t(locale, "nav.profiles");
 
-  const companyLinks: NavItem[] = [
+  const companyLinks: SideNavItem[] = [
     { href: "/home", label: t(locale, "nav.home"), icon: "home" },
     { href: "/coaches", label: people, icon: "coaches" },
     { href: "/logs", label: locale === "fi" ? "Keskustelut" : locale === "sv" ? "Samtal" : "Conversations", icon: "chat" },
@@ -66,7 +60,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     },
   ];
 
-  const platformLinks: NavItem[] = [
+  const platformLinks: SideNavItem[] = [
     { href: "/companies", label: t(locale, "nav.companies"), icon: "home" },
     { href: "/notices", label: locale === "fi" ? "Alustatiedotteet" : locale === "sv" ? "Plattformsnotiser" : "Platform notices", icon: "broadcast" },
   ];
@@ -128,27 +122,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
               <p className="text-xs text-neutral-500">Platform</p>
             </div>
           )}
-          <nav className="flex flex-col gap-0.5">
-            {links
-              .filter((link) => link.show !== false)
-              .map((link) => {
-                const active = path === link.href || path.startsWith(`${link.href}/`);
-                return (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className={`flex items-center gap-2.5 rounded-md px-2 py-2 text-sm transition ${
-                      active
-                        ? "bg-neutral-900 text-amber-400"
-                        : "text-neutral-400 hover:bg-neutral-900 hover:text-amber-400"
-                    }`}
-                  >
-                    <NavIcon name={link.icon} />
-                    <span>{link.label}</span>
-                  </Link>
-                );
-              })}
-          </nav>
+          <SideNav links={links} />
         </div>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">

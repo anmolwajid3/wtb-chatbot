@@ -48,6 +48,47 @@ html.dark body {
   color: #F4F7F2;
 }
 
+.header-bar {
+  background: #1C2820;
+  border-bottom: 1px solid #314033;
+  color: #F4F7F2;
+}
+
+html.light .header-bar {
+  background: #F4F7F2 !important;
+  border-bottom: 1px solid #C9D4C4 !important;
+  color: #122018 !important;
+  box-shadow: 0 1px 2px rgba(18, 32, 24, 0.08);
+}
+
+html.light .header-bar .text-neutral-200,
+html.light .header-bar .text-neutral-300,
+html.light .header-bar .text-neutral-400 {
+  color: #3D4A3A !important;
+}
+
+html.light .header-bar .border-neutral-700 {
+  border-color: #C9D4C4 !important;
+}
+
+html.light .header-bar .bg-neutral-800 {
+  background-color: #FFFFFF !important;
+}
+
+html.light .header-bar .hover\:bg-neutral-800:hover {
+  background-color: #E8EFE4 !important;
+}
+
+html.light .header-bar .bg-amber-500 {
+  background-color: #0E1C12 !important;
+  color: #FFFFFF !important;
+}
+
+html.light .header-bar button[aria-pressed="true"] {
+  background-color: #0E1C12 !important;
+  color: #FFFFFF !important;
+}
+
 html.dark .bg-black { background-color: #101610 !important; }
 html.dark .bg-neutral-900 { background-color: #1C2820 !important; }
 html.dark .bg-neutral-800 { background-color: #243028 !important; }

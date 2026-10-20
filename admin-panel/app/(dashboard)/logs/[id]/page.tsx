@@ -1,6 +1,6 @@
+import { Breadcrumbs } from "../../../components/Breadcrumbs";
 import { getPool } from "@/lib/db";
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import { getWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
@@ -108,9 +108,13 @@ export default async function ConversationDetailPage({ params }: { params: Promi
 
   return (
     <div className="max-w-4xl mx-auto p-8">
-      <Link href="/logs" className="text-sm text-neutral-500 hover:text-amber-400 mb-4 inline-block">
-        ← Back to logs
-      </Link>
+      <Breadcrumbs
+        items={[
+          { href: "/home", label: "Home" },
+          { href: "/logs", label: "Conversations" },
+          { label: "Detail" },
+        ]}
+      />
 
       <div className="flex items-center gap-3 mb-2">
         <h1 className="font-display text-2xl font-semibold text-amber-400 uppercase tracking-wide">

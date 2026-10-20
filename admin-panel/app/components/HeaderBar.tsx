@@ -35,7 +35,7 @@ export function HeaderBar({
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-20 flex items-center justify-end gap-3 border-b border-neutral-800 bg-neutral-900/90 px-4 py-2.5 backdrop-blur">
+    <header className="header-bar sticky top-0 z-20 flex items-center justify-end gap-3 border-b px-4 py-2.5 backdrop-blur">
       <Preferences
         locale={locale}
         theme={theme}
