@@ -179,12 +179,18 @@ fly secrets set \
   BACKEND_URL="https://opas-api.fly.dev"
 ```
 
-Optional (coach image uploads):
+Required for company logos and coach image uploads (Supabase Storage):
+
+1. In Supabase → **Storage** → create a **public** bucket named `company-logos`
+   (and `coach-images` if you upload coach photos).
+2. Project Settings → **API** → copy **Project URL** and **service_role** key.
+3. Set them on Fly:
 
 ```bash
 fly secrets set \
   SUPABASE_URL="https://YOUR_REF.supabase.co" \
-  SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
+  SUPABASE_SERVICE_ROLE_KEY="your-service-role-key" \
+  -a opas-admin
 ```
 
 ### Deploy

@@ -1,3 +1,7 @@
+"use client";
+
+import { useActionState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { removeCompanyLogo, saveCompanyLogo } from "../(dashboard)/companies/logoActions";
 
 export function CompanyLogoForm({
@@ -9,31 +13,62 @@ export function CompanyLogoForm({
   logoUrl: string | null;
   label: string;
 }) {
+  const router = useRouter();
+  const [saveState, saveAction, saving] = useActionState(saveCompanyLogo, null);
+  const [removeState, removeAction, removing] = useActionState(removeCompanyLogo, null);
+
+  useEffect(() => {
+    if (saveState?.ok || removeState?.ok) router.refresh();
+  }, [saveState, removeState, router]);
+
+  const error = saveState?.error || removeState?.error;
+
   return (
-    <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 mb-6 flex flex-wrap items-center gap-4">
-      {logoUrl ? (
-        <img src={logoUrl} alt="" className="h-14 w-14 rounded-md object-cover bg-white" />
-      ) : (
-        <div className="h-14 w-14 rounded-md bg-neutral-800 border border-neutral-700" />
-      )}
-      <form action={saveCompanyLogo} className="flex flex-wrap items-center gap-3">
-        <input type="hidden" name="organization_id" value={organizationId} />
-        <label className="text-sm text-neutral-400">
-          {label}
-          <input type="file" name="logo" accept="image/png,image/jpeg,image/webp,image/gif" required className="mt-1 block text-sm" />
-        </label>
-        <button type="submit" className="bg-amber-500 text-black text-sm font-medium px-3 py-1.5 rounded-md">
-          Save logo
-        </button>
-      </form>
-      {logoUrl && (
-        <form action={removeCompanyLogo}>
+    <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 mb-6">
+      <div className="flex flex-wrap items-center gap-4">
+        {logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logoUrl} alt="" className="h-14 w-14 rounded-md object-cover bg-white" />
+        ) : (
+          <div className="h-14 w-14 rounded-md bg-neutral-800 border border-neutral-700" />
+        )}
+        <form action={saveAction} className="flex flex-wrap items-center gap-3">
           <input type="hidden" name="organization_id" value={organizationId} />
-          <button type="submit" className="text-sm text-neutral-500 hover:text-red-400">
-            Remove
+          <label className="text-sm text-neutral-400">
+            {label}
+            <input
+              type="file"
+              name="logo"
+              accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+              required
+              className="mt-1 block text-sm"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={saving}
+            className="bg-amber-500 text-black text-sm font-medium px-3 py-1.5 rounded-md disabled:opacity-60"
+          >
+            {saving ? "Saving…" : "Save logo"}
           </button>
         </form>
-      )}
+        {logoUrl && (
+          <form action={removeAction}>
+            <input type="hidden" name="organization_id" value={organizationId} />
+            <button
+              type="submit"
+              disabled={removing}
+              className="text-sm text-neutral-500 hover:text-red-400 disabled:opacity-60"
+            >
+              {removing ? "Removing…" : "Remove"}
+            </button>
+          </form>
+        )}
+      </div>
+      <p className="text-xs text-neutral-500 mt-3">
+        Use PNG, JPEG, WebP, or GIF (max 2 MB). iPhone HEIC photos are not supported — export as JPEG first.
+      </p>
+      {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
     </div>
   );
 }
