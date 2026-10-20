@@ -70,20 +70,22 @@ if mood != expect:
   print(f"MOOD FAIL: expected {expect}, got {mood}")
   ok = False
 
-# Phrases must be loaded for this mood (seed markers).
-joined = "\n".join(phrases)
-if marker not in joined:
-  print(f"PHRASE FAIL: expected marker {marker!r} in loaded phrases.")
+# Phrases for this mood must be loaded (natural snippet from the seed SQL).
+joined = "\n".join(phrases).lower()
+if marker.lower() not in joined:
+  print(f"PHRASE FAIL: expected seeded snippet {marker!r} in loaded phrases.")
   print("Did you run scripts/seed_example_phrases.sql? Is API build mood-phrases-v5+?")
+  ok = False
+if len(phrases) < 1:
+  print("PHRASE FAIL: no example phrases loaded for this mood")
   ok = False
 
 # Soft tone check: do not require verbatim copy (by design).
-# Negative replies should not sound chirpy; positive should not be bleak openers.
 low = reply.lower()
 if expect == "negative" and any(x in low for x in ("love the energy", "exciting direction", "thrilled")):
   print("TONE FAIL: negative mood reply sounds overly chirpy")
   ok = False
-if expect == "positive" and any(x in low for x in ("i hear you — carrying a tired", "that sounds draining")):
+if expect == "positive" and any(x in low for x in ("carrying a tired team", "that sounds draining")):
   print("TONE FAIL: positive mood reply sounds like negative empathy template")
   ok = False
 
