@@ -116,6 +116,16 @@ def _looks_like_a_situation(text: str) -> bool:
     return True
 
 
+def _counts_as_intake_turn(is_price_ask: bool, state: dict) -> bool:
+    """True only for a real coaching message that should warm up matching."""
+    return (
+        not is_price_ask
+        and not state.get("off_topic_this_turn")
+        and not state.get("advice_blocked")
+        and state.get("outcome") != "spam"
+    )
+
+
 def run_intent_router(state: dict) -> dict:
     state["outcome"] = "in_progress"  # reset each turn — don't let a prior turn's outcome (e.g. "spam") stick around
     state["safety_loop_count"] = 0
@@ -139,7 +149,7 @@ def run_intent_router(state: dict) -> dict:
         state["guardrail_violated"] = True
         state["guardrail_which_rule"] = blocked_rule
         state["gathered_slots"] = slots
-        state["turn_count"] = state.get("turn_count", 0) + 1
+        # Boundary turns (medical/legal) do NOT count toward warm-up / matching.
         state["ready_to_match"] = False
         return state
 
@@ -185,6 +195,8 @@ def run_intent_router(state: dict) -> dict:
 
         if result.is_spam:
             state["outcome"] = "spam"
+            # Spam does not count toward warm-up / matching.
+            state["ready_to_match"] = False
             return state
 
         state["off_topic_this_turn"] = result.is_off_topic
@@ -202,18 +214,25 @@ def run_intent_router(state: dict) -> dict:
                 slots["need_description"] = f"{existing} {result.need_description}".strip()
 
     state["gathered_slots"] = slots
+    # turn_count = every non-boundary message that reaches here (analytics only).
     state["turn_count"] = state.get("turn_count", 0) + 1
 
-    # Warm-up rule: never recommend on the very first message. Require at
-    # least one prior turn AND the core fields — theme, need_description,
-    # and timing are all required before matching; budget and group_size
-    # stay optional/soft signals per the brief.
+    # Only real coaching intake turns count toward followup_turns.
+    # Spam, medical/legal, off-topic asides, and bare price asks do not.
+    if _counts_as_intake_turn(is_price_ask, state):
+        state["intake_turn_count"] = state.get("intake_turn_count", 0) + 1
+
+    # Warm-up rule: never recommend on the very first coaching message.
+    # Require followup_turns coaching messages AND core fields.
     has_core_fields = (
         bool(slots.get("theme"))
         and bool(slots.get("need_description"))
         and bool(slots.get("timing"))
     )
     settings = fetch_match_settings(state.get("organization_id"))
-    state["ready_to_match"] = has_core_fields and state["turn_count"] >= settings["followup_turns"]
+    state["ready_to_match"] = (
+        has_core_fields
+        and state.get("intake_turn_count", 0) >= settings["followup_turns"]
+    )
 
     return state

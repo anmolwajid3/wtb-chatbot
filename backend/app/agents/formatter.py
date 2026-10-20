@@ -16,6 +16,9 @@ from app.db.connection import fetch_coaches_by_ids, fetch_match_settings, get_ag
 FORMATTER_SYSTEM_PROMPT_DEFAULT = """You are a warm, professional matchmaker for this company's services.
 Base tone: {base_tone}
 
+Reply language (mandatory): {reply_language_name}.
+Write EVERY sentence of your reply in that language only. Do not mix languages.
+
 The customer's current mood has been read as: {mood}. Adapt your phrasing (not your underlying voice) to match. These example phrases show the TONE and WARMTH to aim for — write your own sentence in a similar spirit each time: {example_phrases}
 
 Write the way a warm, direct person actually talks — plain punctuation
@@ -65,63 +68,115 @@ Conversation so far:
 {conversation}
 """
 
+_LOCALE_NAME = {"en": "English", "fi": "Finnish", "sv": "Swedish"}
+
+_COPY = {
+    "en": {
+        "advice": "I can't give medical or legal advice.",
+        "advice_ask_team": "If you want help finding a coach, what's going on with the team?",
+        "advice_ask_timing": "When would you want this to start?",
+        "offtopic": "That's outside what I can help with here.",
+        "price_need_fit": "I can't talk about price until I know the fit. What's going on with the team?",
+        "price_ask_timing": "I can't give prices here — the team sends a quote once we know the fit. When would you want this to start?",
+        "price_quote": "I can't give prices here — the team includes that in the quote when they follow up.",
+        "ask_situation": "What's going on, in your own words?",
+        "ask_timing": "When would you want this to start?",
+        "got_timing": "Got it — {theme}. When would you want this to start?",
+        "one_more": "Before I suggest anyone, is there one more detail about how this is showing up for the team?",
+    },
+    "fi": {
+        "advice": "En voi antaa lääketieteellistä tai juridista neuvontaa.",
+        "advice_ask_team": "Jos etsit valmentajaa, kerro mitä tiimissä tapahtuu?",
+        "advice_ask_timing": "Milloin tämän olisi hyvä alkaa?",
+        "offtopic": "Tämä on asian ulkopuolella tässä chatissa.",
+        "price_need_fit": "En voi puhua hinnasta ennen kuin tiedän tarpeen. Mitä tiimissä on meneillään?",
+        "price_ask_timing": "En voi antaa hintoja tässä — tiimi lähettää tarjouksen, kun sopivuus on selvillä. Milloin tämän olisi hyvä alkaa?",
+        "price_quote": "En voi antaa hintoja tässä — tiimi liittää ne mukaan, kun he ottavat yhteyttä.",
+        "ask_situation": "Kerro omin sanoin, mitä on meneillään?",
+        "ask_timing": "Milloin tämän olisi hyvä alkaa?",
+        "got_timing": "Selvä — {theme}. Milloin tämän olisi hyvä alkaa?",
+        "one_more": "Ennen kuin ehdotan ketään, onko vielä yksi yksityiskohta siitä, miten tämä näkyy tiimissä?",
+    },
+    "sv": {
+        "advice": "Jag kan inte ge medicinsk eller juridisk rådgivning.",
+        "advice_ask_team": "Om du vill ha hjälp att hitta en coach, vad händer i teamet?",
+        "advice_ask_timing": "När skulle ni vilja att det här startar?",
+        "offtopic": "Det ligger utanför vad jag kan hjälpa till med här.",
+        "price_need_fit": "Jag kan inte prata pris innan jag förstår behovet. Vad händer i teamet?",
+        "price_ask_timing": "Jag kan inte ge priser här — teamet skickar en offert när vi vet rätt match. När skulle ni vilja starta?",
+        "price_quote": "Jag kan inte ge priser här — teamet tar med det i offerten när de hör av sig.",
+        "ask_situation": "Berätta med egna ord vad som pågår?",
+        "ask_timing": "När skulle ni vilja att det här startar?",
+        "got_timing": "Okej — {theme}. När skulle ni vilja starta?",
+        "one_more": "Innan jag föreslår någon, finns det en detalj till om hur det här syns i teamet?",
+    },
+}
+
+
+def _locale(state: dict | None = None) -> str:
+    loc = (state or {}).get("reply_locale") or "en"
+    return loc if loc in _COPY else "en"
+
+
+def _t(key: str, locale: str, **kwargs) -> str:
+    text = _COPY.get(locale, _COPY["en"]).get(key) or _COPY["en"][key]
+    return text.format(**kwargs) if kwargs else text
+
 
 def _price_question(text: str) -> bool:
-    return bool(re.search(r"\b(price|pricing|cost|how much|fee|fees)\b", text, re.I))
+    return bool(re.search(r"\b(price|pricing|cost|how much|fee|fees|hinta|kustannus|pris)\b", text, re.I))
 
 
-def boundary_reply(slots: dict, lead: str) -> str:
+def boundary_reply(slots: dict, lead_key: str, locale: str = "en") -> str:
     """Refuse or redirect, then ask only the next coaching question still missing."""
+    lead = _t(lead_key, locale)
     has_situation = bool(slots.get("theme") or slots.get("need_description"))
     if not has_situation:
-        return f"{lead} If you want help finding a coach, what's going on with the team?"
+        return f"{lead} {_t('advice_ask_team', locale)}"
     if not slots.get("timing"):
-        return f"{lead} When would you want this to start?"
+        return f"{lead} {_t('advice_ask_timing', locale)}"
     return lead
 
 
-def follow_up_reply(slots: dict, latest_user: str) -> str | None:
+def follow_up_reply(slots: dict, latest_user: str, locale: str = "en") -> str | None:
     """One next question. None means the conversation is ready for a real match."""
     has_situation = bool(slots.get("theme") or slots.get("need_description"))
 
-    # Price questions must never be answered with a timing ask — handle them first.
     if _price_question(latest_user):
         if not has_situation:
-            return "I can't talk about price until I know the fit. What's going on with the team?"
+            return _t("price_need_fit", locale)
         if not slots.get("timing"):
-            return (
-                "I can't give prices here — the team sends a quote once we know the fit. "
-                "When would you want this to start?"
-            )
-        return "I can't give prices here — the team includes that in the quote when they follow up."
+            return _t("price_ask_timing", locale)
+        return _t("price_quote", locale)
 
     if not has_situation:
-        return "What's going on, in your own words?"
+        return _t("ask_situation", locale)
     if not slots.get("timing"):
         if slots.get("theme"):
-            return f"Got it — {str(slots['theme'])[:60].rstrip('.')}. When would you want this to start?"
-        return "When would you want this to start?"
+            return _t("got_timing", locale, theme=str(slots["theme"])[:60].rstrip("."))
+        return _t("ask_timing", locale)
     return None
 
 
 def run_formatter(state: dict) -> dict:
     latest_user = state["messages"][-1]["content"] if state.get("messages") else ""
     slots = state.get("gathered_slots", {})
+    locale = _locale(state)
     if state.get("advice_blocked") or visitor_advice_rule(latest_user, state.get("organization_id")):
         state["advice_blocked"] = True
-        reply = boundary_reply(slots, "I can't give medical or legal advice.")
+        reply = boundary_reply(slots, "advice", locale)
         state["draft_reply"] = reply
         state["final_reply"] = reply
         return state
     if state.get("off_topic_this_turn"):
-        reply = boundary_reply(slots, "That's outside what I can help with here.")
+        reply = boundary_reply(slots, "offtopic", locale)
         state["draft_reply"] = reply
         state["final_reply"] = reply
         return state
     if not state.get("ready_to_match"):
-        reply = follow_up_reply(slots, latest_user)
+        reply = follow_up_reply(slots, latest_user, locale)
         if reply is None:
-            reply = "Before I suggest anyone, is there one more detail about how this is showing up for the team?"
+            reply = _t("one_more", locale)
         state["draft_reply"] = reply
         state["final_reply"] = reply
         return state
@@ -155,6 +210,7 @@ def run_formatter(state: dict) -> dict:
         matching_was_attempted=matching_was_attempted,
         still_missing=still_missing if still_missing else "none — all required fields gathered",
         conversation=conversation_text,
+        reply_language_name=_LOCALE_NAME.get(locale, "English"),
     )
     prompt_template = get_agent_prompt("formatter", FORMATTER_SYSTEM_PROMPT_DEFAULT, state.get("organization_id"))
     try:
@@ -164,6 +220,7 @@ def run_formatter(state: dict) -> dict:
     prompt += (
         "\n\nNEVER give medical or legal advice. If the visitor asked for either, "
         "refuse in one sentence and then continue with the coaching conversation."
+        f"\nReply only in {_LOCALE_NAME.get(locale, 'English')}."
     )
     if settings["show_match_score"] and coaches:
         prompt += "\nWhen you name a profile, include its match_score as a percentage."

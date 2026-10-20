@@ -795,6 +795,36 @@
     });
   }
 
+  let forcedReplyLanguage = null;
+
+  function applyCompanyAppearance(data) {
+    if (!data) return;
+    if (data.reply_language && data.reply_language !== 'auto' && ['en', 'sv', 'fi'].includes(data.reply_language)) {
+      forcedReplyLanguage = data.reply_language;
+      locale = data.reply_language;
+      writeCookie('harbor_locale', locale);
+      document.querySelectorAll('[data-lang]').forEach((button) => {
+        button.disabled = true;
+        button.title = 'Language is set by the company';
+      });
+    } else {
+      forcedReplyLanguage = null;
+      document.querySelectorAll('[data-lang]').forEach((button) => {
+        button.disabled = false;
+        button.removeAttribute('title');
+      });
+    }
+    if (data.widget_theme === 'light' || data.widget_theme === 'dark') {
+      theme = data.widget_theme;
+      writeCookie('harbor_theme', theme);
+      document.body.classList.toggle('light', theme === 'light');
+    }
+    if (data.widget_accent && /^#[0-9A-Fa-f]{6}$/.test(data.widget_accent)) {
+      document.documentElement.style.setProperty('--amber', data.widget_accent);
+      document.documentElement.style.setProperty('--amber-dark', data.widget_accent);
+    }
+  }
+
   async function loadCompanyBrand() {
     if (!companySlug) return;
     try {
@@ -805,6 +835,7 @@
       const data = await response.json();
       if (data && data.name) {
         companyBrand = data;
+        applyCompanyAppearance(data);
         applyChrome();
       }
     } catch (err) {
@@ -814,6 +845,7 @@
 
   document.querySelectorAll('[data-lang]').forEach((button) => {
     button.addEventListener('click', () => {
+      if (forcedReplyLanguage) return;
       locale = button.getAttribute('data-lang');
       writeCookie('harbor_locale', locale);
       applyChrome();
@@ -1106,7 +1138,12 @@ async function showGreeting() {
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversation_id: conversationId, message: text, organization_slug: companySlug || null }),
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          message: text,
+          organization_slug: companySlug || null,
+          locale: locale,
+        }),
       });
 
       if (!response.ok) {
@@ -1208,6 +1245,7 @@ async function showGreeting() {
           message: '',
           selected_coach_id: coach.coach_id,
           organization_slug: companySlug || null,
+          locale: locale,
         }),
       });
       if (!response.ok) throw new Error('Server responded with ' + response.status);

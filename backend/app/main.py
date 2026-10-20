@@ -12,6 +12,7 @@ from app.db.connection import (
     resolve_organization_id,
     fetch_organization_status,
     fetch_public_company,
+    fetch_company_chat_settings,
     take_message_credit,
 )
 
@@ -33,6 +34,7 @@ class ChatRequest(BaseModel):
     message: str = ""
     selected_coach_id: str | None = None
     organization_slug: str | None = None
+    locale: str | None = None
 
 
 class ChatResponse(BaseModel):
@@ -42,6 +44,7 @@ class ChatResponse(BaseModel):
     detected_mood: str
     coach_matches: list[dict]
     debug_turn_count: int
+    debug_intake_turn_count: int = 0
     debug_gathered_slots: dict
     debug_ready_to_match: bool
     debug_guardrail_violated: bool
@@ -101,11 +104,22 @@ def chat(request: ChatRequest) -> ChatResponse:
             debug_safety_fallback_used=False,
             debug_off_topic_detected=False,
         )
+    chat_settings = fetch_company_chat_settings(organization_id)
+    forced = (chat_settings.get("reply_language") or "auto").lower()
+    visitor_locale = (request.locale or "en").lower()
+    if forced in {"en", "fi", "sv"}:
+        reply_locale = forced
+    elif visitor_locale in {"en", "fi", "sv"}:
+        reply_locale = visitor_locale
+    else:
+        reply_locale = "en"
+
     result = run_turn(
         request.conversation_id,
         request.message,
         request.selected_coach_id,
         organization_id,
+        reply_locale=reply_locale,
     )
     return ChatResponse(**result)
 

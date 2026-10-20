@@ -42,6 +42,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         { href: "/diagnostics", label: t(locale, "nav.diagnostics"), show: canEditCompany(session.role) },
         { href: "/greetings", label: t(locale, "nav.greetings"), show: canEditCompany(session.role) },
         { href: "/matching", label: t(locale, "nav.matching"), show: canManageCompany(session.role) },
+        { href: "/appearance", label: locale === "fi" ? "Ulkoasu" : locale === "sv" ? "Utseende" : "Appearance", show: canManageCompany(session.role) },
         { href: "/messages", label: t(locale, "nav.messages"), show: canManageCompany(session.role) },
         { href: "/logs", label: t(locale, "nav.logs") },
         { href: "/queries", label: t(locale, "nav.inbox") },

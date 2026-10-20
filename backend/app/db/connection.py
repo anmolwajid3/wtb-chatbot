@@ -411,7 +411,10 @@ def fetch_public_company(slug: str | None) -> dict | None:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT name, slug, profile_label, profile_label_plural, logo_url
+                    SELECT name, slug, profile_label, profile_label_plural, logo_url,
+                           COALESCE(reply_language, 'auto') AS reply_language,
+                           COALESCE(widget_theme, 'dark') AS widget_theme,
+                           COALESCE(widget_accent, '#FFFFFF') AS widget_accent
                     FROM organizations
                     WHERE slug = %s AND COALESCE(status, 'active') = 'active'
                     """,
@@ -420,7 +423,51 @@ def fetch_public_company(slug: str | None) -> dict | None:
                 row = cur.fetchone()
                 return dict(row) if row else None
     except Exception:
-        return None
+        # Older DBs without appearance columns — fall back to the basic fields.
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT name, slug, profile_label, profile_label_plural, logo_url
+                        FROM organizations
+                        WHERE slug = %s AND COALESCE(status, 'active') = 'active'
+                        """,
+                        (slug,),
+                    )
+                    row = cur.fetchone()
+                    if not row:
+                        return None
+                    data = dict(row)
+                    data["reply_language"] = "auto"
+                    data["widget_theme"] = "dark"
+                    data["widget_accent"] = "#FFFFFF"
+                    return data
+        except Exception:
+            return None
+
+
+def fetch_company_chat_settings(organization_id: str | None) -> dict:
+    """Reply language + widget theme for one company."""
+    defaults = {"reply_language": "auto", "widget_theme": "dark", "widget_accent": "#FFFFFF"}
+    if not organization_id or organization_id == "00000000-0000-0000-0000-000000000000":
+        return defaults
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT COALESCE(reply_language, 'auto') AS reply_language,
+                           COALESCE(widget_theme, 'dark') AS widget_theme,
+                           COALESCE(widget_accent, '#FFFFFF') AS widget_accent
+                    FROM organizations WHERE id = %s
+                    """,
+                    (organization_id,),
+                )
+                row = cur.fetchone()
+                return dict(row) if row else defaults
+    except Exception:
+        return defaults
 
 
 def resolve_organization_id(slug: str | None) -> str | None:

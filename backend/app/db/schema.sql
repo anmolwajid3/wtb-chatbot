@@ -165,6 +165,9 @@ ALTER TABLE tone_settings ADD COLUMN IF NOT EXISTS organization_id UUID REFERENC
 ALTER TABLE example_phrases ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
 ALTER TABLE guardrails ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS reply_language TEXT NOT NULL DEFAULT 'auto';
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS widget_theme TEXT NOT NULL DEFAULT 'dark';
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS widget_accent TEXT NOT NULL DEFAULT '#FFFFFF';
 
 CREATE TABLE IF NOT EXISTS opening_greetings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
