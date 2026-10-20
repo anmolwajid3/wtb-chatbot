@@ -49,3 +49,21 @@ def test_finnish_follow_up_language():
     reply = follow_up_reply({}, "hei", "fi")
     assert "tiimissä" in reply.lower() or "meneillään" in reply.lower()
 
+
+def test_finnish_timing_phrase_extracted():
+    from app.agents.intent_router import _timing_phrase, _group_size
+
+    assert _timing_phrase("Haluaisimme aloittaa noin kuukauden päästä.")
+    assert "kuukauden" in _timing_phrase("Haluaisimme aloittaa noin kuukauden päästä.").lower()
+    assert _group_size("Tiimimme on demotivoitunut, noin 12 henkilöä.") == 12
+
+
+def test_finnish_timing_unlocks_follow_up():
+    slots = {
+        "theme": "team motivation",
+        "need_description": "team is demotivated",
+        "timing": "noin kuukauden päästä",
+    }
+    assert follow_up_reply(slots, "Haluaisimme aloittaa noin kuukauden päästä.", "fi") is None
+
+

@@ -80,10 +80,24 @@ def _price_question_text(text: str) -> bool:
 def _timing_phrase(text: str) -> str | None:
     """The start window, preferring a real period over a vague 'no rush'."""
     patterns = (
+        # English
         r"\b(?:within|in) (?:a|an|the|\d+) (?:day|days|week|weeks|month|months)\b",
         r"\b(?:next month|this month|next week|this week|this quarter)\b",
         r"\b(?:asap|as soon as possible|right away|immediately)\b",
         r"\b(?:no rush|no urgent deadline|soon)\b",
+        # Finnish — "noin kuukauden päästä", "ensi kuussa", …
+        r"(?:noin\s+)?(?:\d+\s+)?(?:kuukauden|viikon|päivän)\s+päästä",
+        r"(?:kuukauden|viikon|päivän)\s+sisällä",
+        r"ensi\s+(?:kuussa|viikolla)",
+        r"tässä\s+(?:kuussa|viikolla)",
+        r"mahdollisimman\s+pian",
+        r"\b(?:heti|pian)\b",
+        r"ei\s+kiirettä",
+        # Swedish
+        r"\bom\s+(?:en|ett|\d+)\s+(?:månad|månader|vecka|veckor|dag|dagar)\b",
+        r"\bnästa\s+(?:månad|vecka)\b",
+        r"\binom\s+(?:en|ett|\d+)\s+(?:månad|månader|vecka|veckor)\b",
+        r"\bså\s+snart\s+som\s+möjligt\b",
     )
     for pattern in patterns:
         match = re.search(pattern, text, re.I)
@@ -94,7 +108,9 @@ def _timing_phrase(text: str) -> str | None:
 
 def _group_size(text: str) -> int | None:
     match = re.search(
-        r"\b(?:about|around|roughly|approximately)?\s*(\d{1,4})\s*(?:people|persons|person|members)\b",
+        r"\b(?:about|around|roughly|approximately|noin|cirka|ca\.?)?\s*"
+        r"(\d{1,4})\s*"
+        r"(?:people|persons|person|members|henkilöä|henkiloa|henkilöt|henkilot|personer)\b",
         text,
         re.I,
     )
@@ -103,10 +119,20 @@ def _group_size(text: str) -> int | None:
 
 def _still_needs_the_agent(text: str, found_timing: str | None, slots: dict) -> bool:
     """A long line can still hide a start date or a headcount the shortcut missed."""
-    mentions_time = bool(re.search(r"\b(month|week|day|deadline|start|quarter|asap|soon)\b", text, re.I))
+    mentions_time = bool(
+        re.search(
+            r"\b(month|week|day|deadline|start|quarter|asap|soon|"
+            r"kuukaus|kuukauden|viikko|viikon|päivä|päivän|päästä|aloittaa|"
+            r"månad|vecka|inom)\b",
+            text,
+            re.I,
+        )
+    )
     if mentions_time and not found_timing and not slots.get("timing"):
         return True
-    mentions_size = bool(re.search(r"\b(people|person|members)\b", text, re.I))
+    mentions_size = bool(
+        re.search(r"\b(people|person|members|henkilöä|henkiloa|henkilöt|personer)\b", text, re.I)
+    )
     if mentions_size and _group_size(text) is None and not slots.get("group_size"):
         return True
     return False
@@ -168,7 +194,9 @@ def run_intent_router(state: dict) -> dict:
     found_size = _group_size(latest_message)
     if found_size and not slots.get("group_size") and not is_price_ask:
         slots["group_size"] = found_size
-    if _looks_like_a_situation(latest_message) and not is_price_ask:
+    # Don't stuff a pure timing answer into need/theme once the situation is known.
+    timing_only = bool(found_timing) and bool(slots.get("theme") or slots.get("need_description"))
+    if _looks_like_a_situation(latest_message) and not is_price_ask and not timing_only:
         existing_need = slots.get("need_description") or ""
         if latest_message not in existing_need:
             slots["need_description"] = f"{existing_need} {latest_message}".strip()
