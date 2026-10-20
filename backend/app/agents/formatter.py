@@ -177,6 +177,14 @@ def run_formatter(state: dict) -> dict:
         reply = follow_up_reply(slots, latest_user, locale)
         if reply is None:
             reply = _t("one_more", locale)
+        # Warm-up path skips the LLM — still apply a mood example phrase as the
+        # opening beat so admin phrases actually shape the reply.
+        phrases = list((state.get("tone_guidance") or {}).get("example_phrases") or [])
+        mood = state.get("detected_mood") or "neutral"
+        if phrases and mood in {"negative", "positive"} and reply:
+            opener = phrases[0].strip().rstrip(".")
+            if opener and opener.lower() not in reply.lower():
+                reply = f"{opener}. {reply}"
         state["draft_reply"] = reply
         state["final_reply"] = reply
         return state

@@ -50,6 +50,32 @@ def test_finnish_follow_up_language():
     assert "tiimissä" in reply.lower() or "meneillään" in reply.lower()
 
 
+def test_warm_up_applies_negative_example_phrase():
+    from app.agents.formatter import run_formatter
+
+    state = {
+        "messages": [{"role": "user", "content": "Our team is demotivated and exhausted."}],
+        "gathered_slots": {
+            "theme": "team motivation",
+            "need_description": "demotivated team",
+        },
+        "ready_to_match": False,
+        "reply_locale": "en",
+        "detected_mood": "negative",
+        "tone_guidance": {
+            "base_tone": "Warm.",
+            "example_phrases": [
+                "I hear you - carrying a tired team is heavy, and we can find steady support."
+            ],
+        },
+    }
+    out = run_formatter(state)
+    reply = out["final_reply"]
+    assert "carrying a tired team" in reply.lower()
+    assert "when would you want this to start" in reply.lower()
+
+
+
 def test_finnish_timing_phrase_extracted():
     from app.agents.intent_router import _timing_phrase, _group_size
 
