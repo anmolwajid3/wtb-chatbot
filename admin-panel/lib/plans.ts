@@ -14,13 +14,13 @@ export function planCredits(plan: string): number {
   return PLANS.free.credits;
 }
 
-export function clampCreditLimit(raw: unknown, fallback = PLANS.free.credits): number {
+export function clampCreditLimit(raw: unknown, fallback: number = 1000): number {
   const n = Number(raw);
   if (!Number.isFinite(n)) return fallback;
   return Math.min(1_000_000, Math.max(1, Math.floor(n)));
 }
 
-export function clampProfileLimit(raw: unknown, fallback = DEFAULT_PROFILE_LIMIT): number {
+export function clampProfileLimit(raw: unknown, fallback: number = DEFAULT_PROFILE_LIMIT): number {
   const n = Number(raw);
   if (!Number.isFinite(n)) return fallback;
   return Math.min(500, Math.max(1, Math.floor(n)));
