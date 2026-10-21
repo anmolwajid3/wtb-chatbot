@@ -49,9 +49,12 @@ const STATEMENTS = [
   `ALTER TABLE conversations ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id)`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free'`,
-  `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS credit_limit INTEGER NOT NULL DEFAULT 50`,
+  `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS credit_limit INTEGER NOT NULL DEFAULT 1000`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS credits_used INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS credits_period_start TIMESTAMPTZ NOT NULL DEFAULT date_trunc('month', now())`,
+  `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS profile_limit INTEGER NOT NULL DEFAULT 50`,
+  `ALTER TABLE organizations ALTER COLUMN credit_limit SET DEFAULT 1000`,
+  `ALTER TABLE organizations ALTER COLUMN profile_limit SET DEFAULT 50`,
   `DO $$
 DECLARE r record;
 BEGIN

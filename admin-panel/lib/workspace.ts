@@ -15,6 +15,7 @@ export type Organization = {
   plan: string;
   credit_limit: number;
   credits_used: number;
+  profile_limit: number;
   max_matches: number;
   min_match_score: number;
   followup_turns: number;
@@ -50,6 +51,7 @@ export async function getWorkspace(): Promise<Workspace | null> {
 
   const result = await pool.query(
     `SELECT id, name, slug, profile_label, profile_label_plural, status, plan, credit_limit, credits_used,
+            COALESCE(profile_limit, 50) AS profile_limit,
             max_matches, min_match_score, followup_turns, show_match_score, logo_url,
             COALESCE(reply_language, 'auto') AS reply_language,
             COALESCE(widget_theme, 'dark') AS widget_theme,

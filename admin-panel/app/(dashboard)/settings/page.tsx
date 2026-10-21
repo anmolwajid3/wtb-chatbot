@@ -4,6 +4,7 @@ import { Breadcrumbs } from "../../components/Breadcrumbs";
 import { CompanyLogoForm } from "../../components/CompanyLogoForm";
 import { NavIcon } from "../../components/NavIcon";
 import { saveAppearance } from "../appearance/actions";
+import { updateCompanyLimits } from "../companies/limitsActions";
 import { getLocale } from "@/lib/i18n";
 import { canAnalyze, canEditCompany, canManageCompany } from "@/lib/plans";
 import { requireOrganization } from "@/lib/workspace";
@@ -45,6 +46,13 @@ export default async function SettingsPage() {
           diagnostics: "Diagnostiikka",
           diagnosticsDesc: "Tarkista chatbotin perustoiminnot.",
           advanced: "Lisäasetukset",
+          limits: "Kiintiöt",
+          limitsLede: "Kuukausittaiset viestit ja valmentajien enimmäismäärä.",
+          messagesLabel: "Viestikiintiö / kk",
+          coachesLabel: "Valmentajien maksimi",
+          usedHint: "Käytetty tässä kuussa",
+          resetUsed: "Nollaa myös käytetyt viestit",
+          saveLimits: "Tallenna kiintiöt",
         }
        : {
             title: "Settings",
@@ -68,6 +76,13 @@ export default async function SettingsPage() {
             diagnostics: "Diagnostics",
             diagnosticsDesc: "Check that the chatbot’s basics still work.",
             advanced: "Advanced",
+            limits: "Limits",
+            limitsLede: "Monthly messages and max coaches for this company.",
+            messagesLabel: "Monthly message limit",
+            coachesLabel: "Coach / profile limit",
+            usedHint: "Used this month",
+            resetUsed: "Also reset messages used this month",
+            saveLimits: "Save limits",
           };
 
   return (
@@ -91,6 +106,51 @@ export default async function SettingsPage() {
             logoUrl={organization.logo_url}
             label={copy.branding}
           />
+        </section>
+      )}
+
+      {canManageCompany(session.role) && (
+        <section>
+          <h2 className="mb-1 text-sm font-medium uppercase tracking-wide text-neutral-500">{copy.limits}</h2>
+          <p className="mb-3 text-sm text-neutral-500">{copy.limitsLede}</p>
+          <form action={updateCompanyLimits} className="grid gap-4 rounded-lg border border-neutral-800 bg-neutral-900 p-5">
+            <input type="hidden" name="id" value={organization.id} />
+            <input type="hidden" name="return_to" value="/settings" />
+            <label className="block text-sm text-neutral-400">
+              {copy.messagesLabel}
+              <input
+                type="number"
+                name="credit_limit"
+                min={1}
+                max={1000000}
+                defaultValue={organization.credit_limit}
+                className={inputClass}
+              />
+              <span className="mt-1 block text-xs text-neutral-500">
+                {copy.usedHint}: {organization.credits_used}/{organization.credit_limit}
+              </span>
+            </label>
+            <label className="block text-sm text-neutral-400">
+              {copy.coachesLabel}
+              <input
+                type="number"
+                name="profile_limit"
+                min={1}
+                max={500}
+                defaultValue={organization.profile_limit || 50}
+                className={inputClass}
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-neutral-400">
+              <input type="checkbox" name="reset_used" value="1" />
+              {copy.resetUsed}
+            </label>
+            <div>
+              <button type="submit" className="rounded-md bg-amber-500 px-4 py-2 font-medium text-black">
+                {copy.saveLimits}
+              </button>
+            </div>
+          </form>
         </section>
       )}
 

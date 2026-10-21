@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.diagnose import run_diagnosis
-from app.graph import run_turn
+from app.graph import peek_reply_locale, run_turn
 from app.db.connection import (
     resolve_organization_id,
     fetch_organization_status,
@@ -129,10 +129,19 @@ def chat(request: ChatRequest) -> ChatResponse:
     visitor_locale = (request.locale or "fi").lower()
     if visitor_locale == "sv":
         visitor_locale = "fi"
+    sticky = peek_reply_locale(request.conversation_id)
     if forced in {"en", "fi"}:
         reply_locale = forced
+    elif sticky in {"en", "fi"}:
+        # Keep the conversation language stable — short English like "hi" must not
+        # flip a Finnish chat to English mid-thread.
+        detected = _detect_message_locale(request.message or "")
+        if detected and detected != sticky:
+            reply_locale = detected
+        else:
+            reply_locale = sticky
     else:
-        # Auto: prefer the visitor toggle; Finnish writing wins even if UI is English.
+        # First turn (auto): Finnish writing wins; otherwise follow the visitor toggle.
         detected = _detect_message_locale(request.message or "")
         if detected:
             reply_locale = detected
@@ -154,7 +163,7 @@ def chat(request: ChatRequest) -> ChatResponse:
 @app.get("/health")
 def health():
     # build marker so you can confirm a redeploy actually landed
-    return {"status": "ok", "build": "fi-light-no-echo-v1"}
+    return {"status": "ok", "build": "fi-limits-sticky-v1"}
 
 @app.get("/company")
 def company(organization_slug: str | None = None):

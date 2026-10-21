@@ -57,7 +57,7 @@ async function getCoaches(
 export default async function CoachesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string }>;
+  searchParams: Promise<{ q?: string; status?: string; error?: string; max?: string }>;
 }) {
   const { organization } = await requireOrganization();
   const locale = await getLocale();
@@ -69,6 +69,8 @@ export default async function CoachesPage({
   const coaches = await getCoaches(organization.id, q, status);
   const fields = await listProfileFields(organization.id);
   const ready = fields.length > 0;
+  const profileLimit = Number(organization.profile_limit || 50);
+  const atCoachLimit = coaches.length >= profileLimit;
   const inputClass =
     "bg-black border border-neutral-700 rounded-md px-3 py-2 text-sm text-neutral-100 focus:outline-none focus:border-amber-500";
 
@@ -81,16 +83,34 @@ export default async function CoachesPage({
         ]}
       />
       <div className="flex items-center justify-between mb-6">
-        <h1 className="font-display text-2xl text-neutral-100">
-          {labelPlural}
-        </h1>
-        <Link
-          href={ready ? "/coaches/new" : "/profile-structure"}
-          className="bg-amber-500 text-black font-medium px-4 py-2 rounded-md hover:bg-amber-400 transition"
-        >
-          + {ready ? label : t(locale, "nav.fields")}
-        </Link>
+        <div>
+          <h1 className="font-display text-2xl text-neutral-100">
+            {labelPlural}
+          </h1>
+          <p className="mt-1 text-xs text-neutral-500">
+            {coaches.length}/{profileLimit}
+          </p>
+        </div>
+        {!atCoachLimit ? (
+          <Link
+            href={ready ? "/coaches/new" : "/profile-structure"}
+            className="bg-amber-500 text-black font-medium px-4 py-2 rounded-md hover:bg-amber-400 transition"
+          >
+            + {ready ? label : t(locale, "nav.fields")}
+          </Link>
+        ) : (
+          <span className="rounded-md border border-neutral-700 px-4 py-2 text-sm text-neutral-500">
+            {locale === "fi" ? `Raja ${profileLimit} täynnä` : `Limit ${profileLimit} reached`}
+          </span>
+        )}
       </div>
+      {params.error === "limit" && (
+        <p className="mb-4 text-sm text-amber-400">
+          {locale === "fi"
+            ? `Valmentajien raja (${params.max || profileLimit}) on täynnä. Nosta rajaa Asetuksissa.`
+            : `Coach limit (${params.max || profileLimit}) reached. Raise it in Settings.`}
+        </p>
+      )}
 
       <form method="get" className="mb-4 flex flex-wrap items-end gap-3">
         <label className="text-xs text-neutral-500">

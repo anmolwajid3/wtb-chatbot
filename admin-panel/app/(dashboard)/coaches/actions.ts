@@ -142,6 +142,17 @@ export async function saveCoach(formData: FormData) {
       [...values, id, orgId]
     );
   } else {
+    const limits = await pool.query(
+      `SELECT COALESCE(profile_limit, 50) AS profile_limit,
+              (SELECT count(*)::int FROM coaches WHERE organization_id = $1) AS used
+       FROM organizations WHERE id = $1`,
+      [orgId]
+    );
+    const profileLimit = Number(limits.rows[0]?.profile_limit ?? 50);
+    const used = Number(limits.rows[0]?.used ?? 0);
+    if (used >= profileLimit) {
+      redirect(`/coaches?error=limit&max=${profileLimit}`);
+    }
     await pool.query(
       `INSERT INTO coaches (${columns.join(", ")}) VALUES (${placeholders.join(", ")})`,
       values

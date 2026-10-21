@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import { ORG_COOKIE, STARTER_GREETINGS_FI, STARTER_GUARDRAILS, STARTER_PHRASES_FI, STARTER_TONE } from "@/lib/brand";
 import { getPool } from "@/lib/db";
-import { planCredits } from "@/lib/plans";
+import { clampCreditLimit, clampProfileLimit, planCredits, DEFAULT_PROFILE_LIMIT } from "@/lib/plans";
 import { getWorkspace } from "@/lib/workspace";
 
 function slugify(value: string) {
@@ -29,7 +29,8 @@ export async function createCompany(formData: FormData) {
   const adminEmail = String(formData.get("admin_email") || "").trim().toLowerCase();
   const adminPassword = String(formData.get("admin_password") || "");
   const plan = String(formData.get("plan") || "free");
-  const creditLimit = planCredits(plan);
+  const creditLimit = clampCreditLimit(formData.get("credit_limit"), planCredits(plan));
+  const profileLimit = clampProfileLimit(formData.get("profile_limit"), DEFAULT_PROFILE_LIMIT);
 
   if (!name || !slug || !adminName || !adminEmail || adminPassword.length < 6) {
     redirect("/companies?error=1");
@@ -40,10 +41,18 @@ export async function createCompany(formData: FormData) {
   try {
     await client.query("BEGIN");
     const org = await client.query(
-      `INSERT INTO organizations (name, slug, profile_label, profile_label_plural, plan, credit_limit)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO organizations (name, slug, profile_label, profile_label_plural, plan, credit_limit, profile_limit)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id`,
-      [name, slug, profileLabel, profileLabelPlural, plan === "pro" || plan === "enterprise" ? plan : "free", creditLimit]
+      [
+        name,
+        slug,
+        profileLabel,
+        profileLabelPlural,
+        plan === "pro" || plan === "enterprise" ? plan : "free",
+        creditLimit,
+        profileLimit,
+      ]
     );
     const organizationId = org.rows[0].id as string;
     const passwordHash = await bcrypt.hash(adminPassword, 10);
@@ -132,14 +141,17 @@ export async function updateCompany(formData: FormData) {
   const profileLabelPlural = String(formData.get("profile_label_plural") || "Guides").trim() || "Guides";
   const plan = String(formData.get("plan") || "free");
   const safePlan = plan === "pro" || plan === "enterprise" ? plan : "free";
+  const creditLimit = clampCreditLimit(formData.get("credit_limit"), planCredits(safePlan));
+  const profileLimit = clampProfileLimit(formData.get("profile_limit"), DEFAULT_PROFILE_LIMIT);
   if (!id || !name || !slug) redirect("/companies?error=1");
   const pool = getPool();
   try {
     await pool.query(
       `UPDATE organizations
-       SET name = $1, slug = $2, profile_label = $3, profile_label_plural = $4, plan = $5, credit_limit = $6
-       WHERE id = $7`,
-      [name, slug, profileLabel, profileLabelPlural, safePlan, planCredits(safePlan), id]
+       SET name = $1, slug = $2, profile_label = $3, profile_label_plural = $4,
+           plan = $5, credit_limit = $6, profile_limit = $7
+       WHERE id = $8`,
+      [name, slug, profileLabel, profileLabelPlural, safePlan, creditLimit, profileLimit, id]
     );
   } catch {
     redirect("/companies?error=taken");

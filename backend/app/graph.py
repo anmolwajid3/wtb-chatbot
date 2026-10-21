@@ -615,6 +615,19 @@ def forget_conversation(conversation_id: str) -> None:
     _conversations_in_memory.pop(conversation_id, None)
 
 
+def peek_reply_locale(conversation_id: str | None) -> str | None:
+    """Locale already chosen for an in-flight conversation (sticky across turns)."""
+    if not conversation_id:
+        return None
+    state = _conversations_in_memory.get(conversation_id)
+    if not state:
+        return None
+    loc = (state.get("reply_locale") or "").lower()
+    if loc == "sv":
+        return "fi"
+    return loc if loc in {"en", "fi"} else None
+
+
 def run_turn(
     conversation_id: str | None,
     message: str,
