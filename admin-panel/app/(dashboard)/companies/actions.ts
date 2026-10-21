@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
-import { ORG_COOKIE, STARTER_GUARDRAILS, STARTER_TONE } from "@/lib/brand";
+import { ORG_COOKIE, STARTER_GREETINGS_FI, STARTER_GUARDRAILS, STARTER_PHRASES_FI, STARTER_TONE } from "@/lib/brand";
 import { getPool } from "@/lib/db";
 import { planCredits } from "@/lib/plans";
 import { getWorkspace } from "@/lib/workspace";
@@ -60,6 +60,19 @@ export async function createCompany(formData: FormData) {
       await client.query(
         `INSERT INTO guardrails (rule_text, category, organization_id) VALUES ($1, $2, $3)`,
         [rule.rule_text, rule.category, organizationId]
+      );
+    }
+    for (const greeting of STARTER_GREETINGS_FI) {
+      await client.query(
+        `INSERT INTO opening_greetings (greeting_text, is_active, organization_id) VALUES ($1, true, $2)`,
+        [greeting, organizationId]
+      );
+    }
+    for (const phrase of STARTER_PHRASES_FI) {
+      await client.query(
+        `INSERT INTO example_phrases (situation_type, phrase_text, is_active, organization_id)
+         VALUES ($1, $2, true, $3)`,
+        [phrase.situation_type, phrase.phrase_text, organizationId]
       );
     }
     await client.query("COMMIT");
@@ -139,5 +152,20 @@ export async function closeCompany() {
   if (!workspace || workspace.session.role !== "super_admin") redirect("/home");
   const cookieStore = await cookies();
   cookieStore.delete(ORG_COOKIE);
+  redirect("/companies");
+}
+
+export async function resetMessageCredits(formData: FormData) {
+  const workspace = await getWorkspace();
+  if (!workspace || workspace.session.role !== "super_admin") redirect("/home");
+  const id = String(formData.get("id") || "");
+  if (!id) redirect("/companies");
+  const pool = getPool();
+  await pool.query(
+    `UPDATE organizations
+     SET credits_used = 0, credits_period_start = date_trunc('month', now())
+     WHERE id = $1`,
+    [id]
+  );
   redirect("/companies");
 }

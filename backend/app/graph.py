@@ -42,6 +42,8 @@ class ChatState(TypedDict):
     organization_id: str | None
     messages: list  # [{"role": "user"|"assistant", "content": str}]
     turn_count: int
+    intake_turn_count: int
+    reply_locale: str
     gathered_slots: dict
     ready_to_match: bool
     detected_mood: str
@@ -70,12 +72,24 @@ def _route_after_intent(state: ChatState) -> str:
     return "end_spam" if state.get("outcome") == "spam" else "mood_tone"
 
 
-def _spam_reply_node(state: ChatState) -> ChatState:
-    state["final_reply"] = (
+_SPAM_REPLY = {
+    "en": (
         "Thanks for reaching out! It looks like this message might not be related "
         "to these services — if I've misunderstood, feel free to try again "
         "describing what you're looking for."
-    )
+    ),
+    "fi": (
+        "Kiitos yhteydenotosta! Tämä viesti ei näytä liittyvän näihin palveluihin — "
+        "jos ymmärsin väärin, kerro uudestaan mitä etsit."
+    ),
+}
+
+
+def _spam_reply_node(state: ChatState) -> ChatState:
+    locale = state.get("reply_locale") or "fi"
+    if locale == "sv":
+        locale = "fi"
+    state["final_reply"] = _SPAM_REPLY.get(locale, _SPAM_REPLY["fi"])
     return state
 
 
@@ -181,6 +195,8 @@ def _empty_debug_fields() -> dict:
     """Shared defaults for the debug_* fields on response paths that don't run the full graph."""
     return {
         "debug_turn_count": 0,
+        "debug_intake_turn_count": 0,
+        "debug_example_phrases": [],
         "debug_gathered_slots": {},
         "debug_ready_to_match": False,
         "debug_off_topic_detected": False,
@@ -471,6 +487,7 @@ def run_turn(
     selected_coach_id: str | None = None,
     organization_id: str | None = None,
     record: bool = True,
+    reply_locale: str | None = None,
 ) -> dict:
     if selected_coach_id:
         if not conversation_id:
@@ -494,6 +511,8 @@ def run_turn(
             "conversation_id": conversation_id,
             "messages": [],
             "turn_count": 0,
+            "intake_turn_count": 0,
+            "reply_locale": "en",
             "gathered_slots": {},
             "ready_to_match": False,
             "detected_mood": "neutral",
@@ -522,6 +541,10 @@ def run_turn(
         state = _conversations_in_memory[conversation_id]
 
     state["organization_id"] = organization_id or state.get("organization_id")
+    if reply_locale:
+        state["reply_locale"] = reply_locale
+    elif not state.get("reply_locale"):
+        state["reply_locale"] = "en"
 
     state["messages"].append({"role": "user", "content": message})
 
@@ -577,6 +600,10 @@ def run_turn(
         "coach_matches": coach_matches,
         # --- TEMPORARY DEBUG FIELDS — remove once slot-filling behavior is confirmed correct ---
         "debug_turn_count": result_state.get("turn_count", 0),
+        "debug_intake_turn_count": result_state.get("intake_turn_count", 0),
+        "debug_example_phrases": list(
+            (result_state.get("tone_guidance") or {}).get("example_phrases") or []
+        ),
         "debug_gathered_slots": result_state.get("gathered_slots", {}),
         "debug_ready_to_match": result_state.get("ready_to_match", False),
         "debug_guardrail_violated": result_state.get("guardrail_violated", False),

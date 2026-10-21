@@ -1,3 +1,4 @@
+import { Breadcrumbs } from "../../components/Breadcrumbs";
 import { getPool } from "@/lib/db";
 import { canAnalyze } from "@/lib/plans";
 import { getWorkspace } from "@/lib/workspace";
@@ -31,7 +32,7 @@ export default async function LlmSettingsPage() {
   if (!organizationId) {
     return (
       <div className="max-w-3xl mx-auto p-8">
-        <h1 className="font-display text-2xl text-neutral-100 mb-2">Model</h1>
+        <h1 className="font-display text-2xl text-neutral-100 mb-2">Model selection</h1>
         <p className="text-sm text-neutral-400">Open a company to set its model, spend window, and usage.</p>
       </div>
     );
@@ -82,8 +83,15 @@ export default async function LlmSettingsPage() {
 
   return (
     <div className="max-w-5xl mx-auto p-8">
+      <Breadcrumbs
+        items={[
+          { href: "/home", label: "Home" },
+          { href: "/settings", label: "Settings" },
+          { label: "Model selection" },
+        ]}
+      />
       <h1 className="font-display text-2xl font-semibold text-amber-400 uppercase tracking-wide mb-2">
-        LLM Settings
+        Model selection
       </h1>
       <p className="text-sm text-neutral-400 mb-3">
         This company&apos;s model and spend are separate from every other company. Changes apply on the next conversation.
@@ -137,9 +145,9 @@ export default async function LlmSettingsPage() {
         </div>
         <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-5">
           <h3 className="font-medium text-neutral-100 mb-1">Max Spend Cap</h3>
-          <p className="text-xs text-neutral-500 mb-3">A visibility threshold, not an automatic cutoff</p>
+          <p className="text-xs text-neutral-500 mb-3">Visibility threshold — banner turns red past this amount</p>
           <MaxCapForm currentCap={cap} setMaxCap={setMaxCap} />
-          <form action={setSpendPeriod} className="mt-4 flex items-center gap-2">
+          <form action={setSpendPeriod} className="mt-4 flex flex-wrap items-center gap-2">
             <label className="text-xs text-neutral-500" htmlFor="spend_period">Window</label>
             <select
               id="spend_period"
@@ -152,6 +160,14 @@ export default async function LlmSettingsPage() {
               <option value="month">Monthly</option>
             </select>
             <button type="submit" className="text-sm text-amber-400 hover:underline">Save window</button>
+            <button
+              type="submit"
+              name="spend_period"
+              value="month"
+              className="text-sm text-neutral-500 hover:text-amber-400"
+            >
+              Reset window
+            </button>
           </form>
         </div>
       </div>

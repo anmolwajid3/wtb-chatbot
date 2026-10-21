@@ -595,9 +595,8 @@
 
 <div class="demo-tools">
   <div role="group" aria-label="Language">
-    <button type="button" data-lang="en">EN</button>
-    <button type="button" data-lang="sv">SV</button>
     <button type="button" data-lang="fi">FI</button>
+    <button type="button" data-lang="en">EN</button>
   </div>
   <button type="button" id="theme-toggle">Light</button>
 </div>
@@ -654,9 +653,13 @@
   </div>
 </div>
 
+<script src="config.js"></script>
 <script>
-  const API_URL = 'http://localhost:8000/chat';
-  const companySlug = new URLSearchParams(location.search).get('company') || '';
+  const _params = new URLSearchParams(location.search);
+  const _apiBase = (_params.get('api') || window.OPAS_API_URL || 'http://localhost:8000').replace(/\/$/, '');
+  const _adminBase = (_params.get('admin') || window.OPAS_ADMIN_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const API_URL = _apiBase + '/chat';
+  const companySlug = _params.get('company') || '';
   const COPY = {
     en: {
       kicker: 'Opas',
@@ -674,23 +677,6 @@
       errorSelect: "Couldn't complete that selection just now — please try again.",
       themeToLight: 'Light',
       themeToDark: 'Dark',
-    },
-    sv: {
-      kicker: 'Opas',
-      title: 'Hitta rätt<br>vägledare för teamet',
-      line1: 'Beskriv situationen med egna ord.',
-      line2: 'Assistenten ställer ett par frågor och pekar mot en passande profil.',
-      note: 'Lägg till ?company=ert-namn för att prata med ett företag.',
-      brand: 'Opas',
-      status: 'Svarar oftast inom några sekunder',
-      placeholder: 'Beskriv vad du letar efter...',
-      select: 'Välj den här',
-      selecting: 'Väljer...',
-      greeting: 'Hej! Berätta lite om vad du letar efter, så hjälper jag dig att hitta rätt.',
-      errorSend: 'Assistenten gick inte att nå just nu. Kontrollera att servern körs och försök igen.',
-      errorSelect: 'Valet gick inte att slutföra just nu. Försök igen.',
-      themeToLight: 'Ljust',
-      themeToDark: 'Mörkt',
     },
     fi: {
       kicker: 'Opas',
@@ -719,7 +705,7 @@
     document.cookie = name + '=' + value + ';path=/;max-age=31536000;samesite=lax';
   }
 
-  let locale = ['en', 'sv', 'fi'].includes(readCookie('harbor_locale')) ? readCookie('harbor_locale') : 'en';
+  let locale = ['fi', 'en'].includes(readCookie('harbor_locale')) ? readCookie('harbor_locale') : (readCookie('harbor_locale') === 'sv' ? 'fi' : 'fi');
   let theme = readCookie('harbor_theme') === 'light' ? 'light' : 'dark';
   document.body.classList.toggle('light', theme === 'light');
 
@@ -737,10 +723,9 @@
     if (companyBrand && label) {
       const titles = {
         en: 'Find the right<br>' + label.toLowerCase(),
-        sv: 'Hitta rätt<br>' + label.toLowerCase(),
         fi: 'Löydä oikea<br>' + label.toLowerCase(),
       };
-      document.getElementById('demo-title').innerHTML = titles[locale] || titles.en;
+      document.getElementById('demo-title').innerHTML = titles[locale] || titles.fi;
       document.getElementById('demo-note').textContent = brandName;
     } else {
       document.getElementById('demo-title').innerHTML = text.title;
@@ -754,7 +739,7 @@
     if (companyBrand && companyBrand.logo_url) {
       const src = companyBrand.logo_url.startsWith('http')
         ? companyBrand.logo_url
-        : 'http://localhost:3000' + companyBrand.logo_url;
+        : _adminBase + companyBrand.logo_url;
       logo.alt = brandName;
       logo.hidden = true;
       logo.onerror = () => {
@@ -791,6 +776,36 @@
     });
   }
 
+  let forcedReplyLanguage = null;
+
+  function applyCompanyAppearance(data) {
+    if (!data) return;
+    if (data.reply_language && data.reply_language !== 'auto' && ['fi', 'en'].includes(data.reply_language)) {
+      forcedReplyLanguage = data.reply_language;
+      locale = data.reply_language;
+      writeCookie('harbor_locale', locale);
+      document.querySelectorAll('[data-lang]').forEach((button) => {
+        button.disabled = true;
+        button.title = 'Language is set by the company';
+      });
+    } else {
+      forcedReplyLanguage = null;
+      document.querySelectorAll('[data-lang]').forEach((button) => {
+        button.disabled = false;
+        button.removeAttribute('title');
+      });
+    }
+    if (data.widget_theme === 'light' || data.widget_theme === 'dark') {
+      theme = data.widget_theme;
+      writeCookie('harbor_theme', theme);
+      document.body.classList.toggle('light', theme === 'light');
+    }
+    if (data.widget_accent && /^#[0-9A-Fa-f]{6}$/.test(data.widget_accent)) {
+      document.documentElement.style.setProperty('--amber', data.widget_accent);
+      document.documentElement.style.setProperty('--amber-dark', data.widget_accent);
+    }
+  }
+
   async function loadCompanyBrand() {
     if (!companySlug) return;
     try {
@@ -801,6 +816,7 @@
       const data = await response.json();
       if (data && data.name) {
         companyBrand = data;
+        applyCompanyAppearance(data);
         applyChrome();
       }
     } catch (err) {
@@ -810,6 +826,7 @@
 
   document.querySelectorAll('[data-lang]').forEach((button) => {
     button.addEventListener('click', () => {
+      if (forcedReplyLanguage) return;
       locale = button.getAttribute('data-lang');
       writeCookie('harbor_locale', locale);
       applyChrome();
@@ -845,12 +862,13 @@
 
   fullscreenBtn.addEventListener('click', toggleFullscreen);
 
-  const DEFAULT_GREETING = copy().greeting;
-
-async function showGreeting() {
-    let greetingText = DEFAULT_GREETING;
+  async function showGreeting() {
+    let greetingText = copy().greeting;
     try {
-      const greetingUrl = API_URL.replace('/chat', '/greeting') + (companySlug ? ('?organization_slug=' + encodeURIComponent(companySlug)) : '');
+      const params = new URLSearchParams();
+      if (companySlug) params.set('organization_slug', companySlug);
+      params.set('locale', locale);
+      const greetingUrl = API_URL.replace('/chat', '/greeting') + '?' + params.toString();
       const response = await fetch(greetingUrl);
       if (response.ok) {
         const data = await response.json();
@@ -866,13 +884,15 @@ async function showGreeting() {
     addBotMessage(greetingText);
   }
 
-  function openPanel() {
+  async function openPanel() {
     panel.classList.add('open');
     panel.setAttribute('aria-hidden', 'false');
     launcher.setAttribute('aria-expanded', 'true');
     launcher.style.display = 'none';
     if (messagesEl.children.length === 0) {
-      showGreeting();
+      // Wait for company language/theme so the greeting is not stuck in English.
+      await brandReady;
+      await showGreeting();
     }
     input.focus();
   }
@@ -1102,7 +1122,12 @@ async function showGreeting() {
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversation_id: conversationId, message: text, organization_slug: companySlug || null }),
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          message: text,
+          organization_slug: companySlug || null,
+          locale: locale,
+        }),
       });
 
       if (!response.ok) {
@@ -1139,7 +1164,7 @@ async function showGreeting() {
   const detailMatchRow = document.getElementById('coach-detail-match-row');
   const detailSelectBtn = document.getElementById('coach-detail-select-btn');
   applyChrome();
-  loadCompanyBrand();
+  const brandReady = loadCompanyBrand();
 
   let activeDetailCoach = null;
 
@@ -1204,6 +1229,7 @@ async function showGreeting() {
           message: '',
           selected_coach_id: coach.coach_id,
           organization_slug: companySlug || null,
+          locale: locale,
         }),
       });
       if (!response.ok) throw new Error('Server responded with ' + response.status);

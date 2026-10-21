@@ -1,4 +1,6 @@
+import { Breadcrumbs } from "../../components/Breadcrumbs";
 import { getPool } from "@/lib/db";
+import { getLocale } from "@/lib/i18n";
 import { assertStaff, canEditCompany } from "@/lib/plans";
 import { getWorkspace, requireOrganization } from "@/lib/workspace";
 import { redirect } from "next/navigation";
@@ -47,35 +49,48 @@ async function saveTone(formData: FormData) {
 export default async function TonePage() {
   const { session, organization } = await requireOrganization();
   if (!canEditCompany(session.role)) redirect("/home");
+  const locale = await getLocale();
+  const fi = locale === "fi";
   const tone = await getToneSetting(organization.id);
 
   return (
     <div className="max-w-3xl mx-auto p-8">
+      <Breadcrumbs
+        items={[
+          { href: "/home", label: fi ? "Koti" : "Home" },
+          { href: "/chatbot", label: "Chatbot" },
+          { label: fi ? "Äänen sävy" : "Tone of Voice" },
+        ]}
+      />
       <h1 className="font-display text-2xl font-semibold text-amber-400 uppercase tracking-wide mb-2">
-        Tone of Voice
+        {fi ? "Äänen sävy" : "Tone of Voice"}
       </h1>
       <p className="text-sm text-neutral-400 mb-6">
-        This is {organization.name}&apos;s voice. Other companies do not use it. It stays constant across every conversation.
-        What changes per-conversation is phrasing, based on the customer&apos;s mood (see the
-        Example Phrases page for that).
+        {fi
+          ? `Tämä on yrityksen ${organization.name} ääni. Se pysyy samana jokaisessa keskustelussa. Vuorokohtainen sävy muuttuu tunnelman mukaan (ks. Esimerkkifraasit).`
+          : `This is ${organization.name}'s voice. It stays constant across every conversation. Per-turn phrasing follows mood (see Example Phrases).`}
       </p>
 
       <form action={saveTone} className="bg-neutral-900 rounded-lg border border-neutral-800 p-5">
         <label className="block">
-          <span className="text-sm text-neutral-400">Base tone description</span>
+          <span className="text-sm text-neutral-400">{fi ? "Perussävyn kuvaus" : "Base tone description"}</span>
           <textarea
             name="description_text"
             defaultValue={tone?.description_text || ""}
             rows={6}
             className="mt-2 w-full bg-black border border-neutral-700 rounded-md px-3 py-2 text-sm text-neutral-100 focus:outline-none focus:border-amber-500"
-            placeholder="e.g. Warm, professional, empathetic coaching-industry tone. Reflects a consultative, human style — never robotic, never pushy."
+            placeholder={
+              fi
+                ? "Esim. Lämmin, ammattimainen ja empaattinen valmennustyyli. Konsultatiivinen, inhimillinen — ei robottimainen, ei tyrkyttävä."
+                : "e.g. Warm, professional, empathetic coaching tone — never robotic, never pushy."
+            }
           />
         </label>
         <button
           type="submit"
           className="mt-4 bg-amber-500 text-black font-medium px-5 py-2.5 rounded-md hover:bg-amber-400 transition"
         >
-          Save
+          {fi ? "Tallenna" : "Save"}
         </button>
       </form>
     </div>

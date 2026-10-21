@@ -233,7 +233,7 @@ export async function setCoachAccountCredentials(
   const passwordHash = await bcrypt.hash(password, 10);
 
   try {
-      await pool.query(
+    await pool.query(
       `INSERT INTO coach_accounts (coach_id, username, password_hash, must_change_password)
        VALUES ($1, $2, $3, true)
        ON CONFLICT (coach_id) DO UPDATE SET username = $2, password_hash = $3, must_change_password = true`,

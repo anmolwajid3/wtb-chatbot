@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { CompanyLogoForm } from "../../components/CompanyLogoForm";
-import { createCompany, openCompany, setCompanyStatus, updateCompany } from "./actions";
+import { createCompany, openCompany, resetMessageCredits, setCompanyStatus, updateCompany } from "./actions";
 import { getPool } from "@/lib/db";
 import { getLocale, t } from "@/lib/i18n";
 import { getWorkspace } from "@/lib/workspace";
@@ -46,7 +46,7 @@ export default async function CompaniesPage({
           { label: "Active", value: result.rows.filter((row) => row.status === "active").length },
           { label: t(locale, "nav.profiles"), value: result.rows.reduce((sum, row) => sum + Number(row.profiles), 0) },
           {
-            label: locale === "fi" ? "Viestit tässä kuussa" : locale === "sv" ? "Meddelanden denna månad" : "Messages this month",
+            label: locale === "fi" ? "Viestit tässä kuussa" : "Messages this month",
             value: result.rows.reduce((sum, row) => sum + Number(row.credits_used), 0),
           },
         ].map((card) => (
@@ -59,7 +59,7 @@ export default async function CompaniesPage({
       {result.rows.length > 0 && (
         <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-5 mb-8">
           <h2 className="text-sm font-medium text-neutral-500 mb-4">
-            {locale === "fi" ? "Profiilit yrityksittäin" : locale === "sv" ? "Profiler per företag" : "Profiles by company"}
+            {locale === "fi" ? "Profiilit yrityksittäin" : "Profiles by company"}
           </h2>
           <div className="grid gap-3">
             {result.rows.map((company) => {
@@ -126,6 +126,12 @@ export default async function CompaniesPage({
                         <input type="hidden" name="id" value={company.id} />
                         <button type="submit" className="bg-amber-500 text-black text-sm font-medium px-3 py-1.5 rounded-md">
                           {t(locale, "companies.enter")} {company.name}
+                        </button>
+                      </form>
+                      <form action={resetMessageCredits}>
+                        <input type="hidden" name="id" value={company.id} />
+                        <button type="submit" className="text-sm text-neutral-400 hover:text-amber-400">
+                          Reset messages
                         </button>
                       </form>
                       {company.status !== "archived" && (

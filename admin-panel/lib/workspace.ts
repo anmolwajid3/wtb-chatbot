@@ -20,6 +20,9 @@ export type Organization = {
   followup_turns: number;
   show_match_score: boolean;
   logo_url: string | null;
+  reply_language: string;
+  widget_theme: string;
+  widget_accent: string;
 };
 
 export type Workspace = {
@@ -47,7 +50,10 @@ export async function getWorkspace(): Promise<Workspace | null> {
 
   const result = await pool.query(
     `SELECT id, name, slug, profile_label, profile_label_plural, status, plan, credit_limit, credits_used,
-            max_matches, min_match_score, followup_turns, show_match_score, logo_url
+            max_matches, min_match_score, followup_turns, show_match_score, logo_url,
+            COALESCE(reply_language, 'auto') AS reply_language,
+            COALESCE(widget_theme, 'dark') AS widget_theme,
+            COALESCE(widget_accent, '#FFFFFF') AS widget_accent
      FROM organizations WHERE id = $1`,
     [organizationId]
   );
@@ -73,6 +79,7 @@ export type ProfileField = {
   sort_order: number;
   is_builtin: boolean;
   group_name: string;
+  is_active?: boolean;
 };
 
 export type ProfileSection = {
@@ -92,12 +99,17 @@ export async function listProfileSections(organizationId: string): Promise<Profi
   return result.rows;
 }
 
-export async function listProfileFields(organizationId: string): Promise<ProfileField[]> {
+export async function listProfileFields(
+  organizationId: string,
+  options?: { includeInactive?: boolean }
+): Promise<ProfileField[]> {
   const pool = getPool();
   const result = await pool.query(
-    `SELECT id, field_key, label, field_type, options, required, sort_order, is_builtin, group_name
+    `SELECT id, field_key, label, field_type, options, required, sort_order, is_builtin, group_name,
+            COALESCE(is_active, true) AS is_active
      FROM profile_fields
      WHERE organization_id = $1
+       ${options?.includeInactive ? "" : "AND COALESCE(is_active, true) = true"}
      ORDER BY sort_order ASC, label ASC`,
     [organizationId]
   );

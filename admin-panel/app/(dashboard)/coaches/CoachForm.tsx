@@ -190,7 +190,19 @@ function CustomProfileForm({
 
 export default async function CoachForm({ coach }: { coach: CoachRecord }) {
   const workspace = await getWorkspace();
-  const allFields = workspace?.organization ? await listProfileFields(workspace.organization.id) : [];
+  const savedCustom =
+    coach?.custom_fields && typeof coach.custom_fields === "object"
+      ? (coach.custom_fields as Record<string, unknown>)
+      : {};
+  const listed = workspace?.organization
+    ? await listProfileFields(workspace.organization.id, { includeInactive: true })
+    : [];
+  // Active fields always; inactive only when this profile already has a value filled.
+  const allFields = listed.filter((field) => {
+    if (field.is_active !== false) return true;
+    const value = savedCustom[field.field_key];
+    return value != null && String(value).trim() !== "";
+  });
   const hasBuiltin = allFields.some((field) => field.is_builtin);
   if (!hasBuiltin) {
     const sections = workspace?.organization ? await listProfileSections(workspace.organization.id) : [];
@@ -205,10 +217,6 @@ export default async function CoachForm({ coach }: { coach: CoachRecord }) {
     );
   }
   const customFields = allFields.filter((field) => !field.is_builtin);
-  const savedCustom =
-    coach?.custom_fields && typeof coach.custom_fields === "object"
-      ? (coach.custom_fields as Record<string, unknown>)
-      : {};
   const currentImages: string[] = Array.isArray(coach?.image_urls)
     ? (coach.image_urls as string[])
     : [];

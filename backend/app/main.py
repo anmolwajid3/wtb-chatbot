@@ -2,6 +2,8 @@ from dotenv import load_dotenv
 
 load_dotenv()  # must happen before anything reads os.environ, hence first import
 
+import re
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -12,8 +14,24 @@ from app.db.connection import (
     resolve_organization_id,
     fetch_organization_status,
     fetch_public_company,
+    fetch_company_chat_settings,
     take_message_credit,
 )
+
+
+def _detect_message_locale(text: str) -> str | None:
+    """Best-effort locale from the visitor's words (Finnish / Swedish markers)."""
+    if not text:
+        return None
+    lower = text.lower()
+    if re.search(
+        r"[äöå]|(\b(mitä|meidän|tiimi|haluaisimme|paljonko|kerro|kiitos|hei|kuukauden)\b)",
+        lower,
+    ):
+        # Swedish also uses å/ä/ö — prefer FI when clear Finnish function words appear.
+        return "fi"
+    return None
+
 
 app = FastAPI(title="Opas")
 
@@ -33,6 +51,7 @@ class ChatRequest(BaseModel):
     message: str = ""
     selected_coach_id: str | None = None
     organization_slug: str | None = None
+    locale: str | None = None
 
 
 class ChatResponse(BaseModel):
@@ -42,6 +61,8 @@ class ChatResponse(BaseModel):
     detected_mood: str
     coach_matches: list[dict]
     debug_turn_count: int
+    debug_intake_turn_count: int = 0
+    debug_example_phrases: list[str] = []
     debug_gathered_slots: dict
     debug_ready_to_match: bool
     debug_guardrail_violated: bool
@@ -101,18 +122,39 @@ def chat(request: ChatRequest) -> ChatResponse:
             debug_safety_fallback_used=False,
             debug_off_topic_detected=False,
         )
+    chat_settings = fetch_company_chat_settings(organization_id)
+    forced = (chat_settings.get("reply_language") or "auto").lower()
+    if forced == "sv":
+        forced = "fi"
+    visitor_locale = (request.locale or "fi").lower()
+    if visitor_locale == "sv":
+        visitor_locale = "fi"
+    if forced in {"en", "fi"}:
+        reply_locale = forced
+    else:
+        # Auto: prefer the visitor toggle; Finnish writing wins even if UI is English.
+        detected = _detect_message_locale(request.message or "")
+        if detected:
+            reply_locale = detected
+        elif visitor_locale in {"en", "fi"}:
+            reply_locale = visitor_locale
+        else:
+            reply_locale = "fi"
+
     result = run_turn(
         request.conversation_id,
         request.message,
         request.selected_coach_id,
         organization_id,
+        reply_locale=reply_locale,
     )
     return ChatResponse(**result)
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    # build marker so you can confirm a redeploy actually landed
+    return {"status": "ok", "build": "mood-phrases-v6"}
 
 @app.get("/company")
 def company(organization_slug: str | None = None):
@@ -123,7 +165,20 @@ def company(organization_slug: str | None = None):
 
 
 @app.get("/greeting")
-def greeting(organization_slug: str | None = None):
+def greeting(organization_slug: str | None = None, locale: str | None = None):
     from app.db.connection import fetch_random_greeting
     organization_id = resolve_organization_id(organization_slug)
-    return {"greeting": fetch_random_greeting(organization_id)}
+    chat_settings = fetch_company_chat_settings(organization_id)
+    forced = (chat_settings.get("reply_language") or "auto").lower()
+    if forced == "sv":
+        forced = "fi"
+    incoming = (locale or "fi").lower()
+    if incoming == "sv":
+        incoming = "fi"
+    if forced in {"en", "fi"}:
+        reply_locale = forced
+    elif incoming in {"en", "fi"}:
+        reply_locale = incoming
+    else:
+        reply_locale = "fi"
+    return {"greeting": fetch_random_greeting(organization_id, reply_locale), "locale": reply_locale}

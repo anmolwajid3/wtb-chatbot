@@ -15,18 +15,23 @@ export default function MaxCapForm({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  async function handleSave() {
+  async function handleSave(next = cap) {
     setSaving(true);
-    await setMaxCap(cap);
+    await setMaxCap(next);
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
     router.refresh();
   }
 
+  async function handleReset() {
+    setCap("");
+    await handleSave("");
+  }
+
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="text-neutral-500">$</span>
         <input
           type="number"
@@ -39,16 +44,23 @@ export default function MaxCapForm({
         />
         <button
           type="button"
-          onClick={handleSave}
+          onClick={() => handleSave()}
           disabled={saving}
           className="bg-amber-500 text-black font-medium px-4 py-2 rounded-md text-sm hover:bg-amber-400 disabled:opacity-50"
         >
           {saving ? "Saving..." : saved ? "Saved" : "Save"}
         </button>
+        <button
+          type="button"
+          onClick={handleReset}
+          disabled={saving || (!cap && currentCap === null)}
+          className="rounded-md border border-neutral-700 px-3 py-2 text-sm text-neutral-300 hover:border-amber-500 hover:text-amber-400 disabled:opacity-40"
+        >
+          Reset
+        </button>
       </div>
       <p className="text-xs text-neutral-600">
-        This is a visibility threshold, not an automatic cutoff — the assistant keeps running past
-        this cap, but the banner above turns red so you notice. Leave blank for no cap.
+        Visibility threshold only — leave blank for no cap. Reset clears the threshold.
       </p>
     </div>
   );

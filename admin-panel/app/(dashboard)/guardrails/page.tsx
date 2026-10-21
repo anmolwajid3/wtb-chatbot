@@ -1,3 +1,4 @@
+import { Breadcrumbs } from "../../components/Breadcrumbs";
 import { getPool } from "@/lib/db";
 import { assertStaff, canEditCompany } from "@/lib/plans";
 import { getWorkspace, requireOrganization } from "@/lib/workspace";
@@ -71,6 +72,13 @@ export default async function GuardrailsPage() {
 
   return (
     <div className="max-w-5xl mx-auto p-8">
+      <Breadcrumbs
+        items={[
+          { href: "/home", label: "Home" },
+          { href: "/chatbot", label: "Chatbot" },
+          { label: "Guardrails" },
+        ]}
+      />
       <div className="flex items-center justify-between mb-2">
         <h1 className="font-display text-2xl font-semibold text-amber-400 uppercase tracking-wide">
           Guardrails
