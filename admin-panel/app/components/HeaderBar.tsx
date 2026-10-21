@@ -19,6 +19,9 @@ export function HeaderBar({
   logoutLabel,
   profileLabel,
   noticesLabel,
+  profileHref = "/profile",
+  noticesHref = "/notifications",
+  logoutAction,
 }: {
   locale: Locale;
   theme: "light" | "dark";
@@ -31,6 +34,9 @@ export function HeaderBar({
   logoutLabel: string;
   profileLabel: string;
   noticesLabel: string;
+  profileHref?: string;
+  noticesHref?: string;
+  logoutAction?: (formData: FormData) => void | Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -44,7 +50,7 @@ export function HeaderBar({
         themeDarkLabel={themeDarkLabel}
       />
       <Link
-        href="/notifications"
+        href={noticesHref}
         className="relative inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-400 hover:bg-neutral-800 hover:text-amber-400"
         aria-label={noticesLabel}
         title={noticesLabel}
@@ -70,14 +76,19 @@ export function HeaderBar({
         </button>
         {open && (
           <>
-            <button type="button" className="fixed inset-0 z-10 cursor-default bg-transparent" aria-label="Close menu" onClick={() => setOpen(false)} />
+            <button
+              type="button"
+              className="fixed inset-0 z-10 cursor-default bg-transparent"
+              aria-label="Close menu"
+              onClick={() => setOpen(false)}
+            />
             <div className="absolute right-0 z-20 mt-2 w-56 rounded-lg border border-neutral-800 bg-neutral-900 py-2 shadow-lg">
               <div className="border-b border-neutral-800 px-3 pb-2">
                 <p className="truncate text-sm text-neutral-100">{userName}</p>
                 <p className="truncate text-xs text-neutral-500">{userEmail}</p>
               </div>
               <Link
-                href="/profile"
+                href={profileHref}
                 className="flex items-center gap-2 px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-800 hover:text-amber-400"
                 onClick={() => setOpen(false)}
               >
@@ -85,7 +96,7 @@ export function HeaderBar({
                 {profileLabel}
               </Link>
               <Link
-                href="/notifications"
+                href={noticesHref}
                 className="flex items-center gap-2 px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-800 hover:text-amber-400"
                 onClick={() => setOpen(false)}
               >
@@ -95,6 +106,7 @@ export function HeaderBar({
               <div className="border-t border-neutral-800 px-1 pt-1">
                 <LogoutForm
                   label={logoutLabel}
+                  action={logoutAction}
                   className="w-full rounded-md px-2 py-2 text-left text-sm text-neutral-400 hover:bg-neutral-800 hover:text-red-400"
                 />
               </div>

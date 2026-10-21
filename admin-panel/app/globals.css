@@ -54,6 +54,25 @@ html.dark body {
   color: #F4F7F2;
 }
 
+/* Company accent in coach portal (overrides amber utilities). */
+.coach-portal {
+  --brand-accent: #f59e0b;
+}
+.coach-portal .bg-amber-500,
+.coach-portal .hover\:bg-amber-400:hover {
+  background-color: var(--brand-accent) !important;
+  color: #101610 !important;
+}
+.coach-portal .text-amber-400,
+.coach-portal .hover\:text-amber-400:hover {
+  color: var(--brand-accent) !important;
+}
+.coach-portal .border-amber-500,
+.coach-portal .hover\:border-amber-500:hover,
+.coach-portal .focus\:border-amber-500:focus {
+  border-color: var(--brand-accent) !important;
+}
+
 html.light .header-bar {
   background: #F4F7F2 !important;
   border-bottom: 1px solid #C9D4C4 !important;

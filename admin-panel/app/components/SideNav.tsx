@@ -13,6 +13,8 @@ export type SideNavItem = {
 
 function matchesPath(pathname: string, href: string): boolean {
   if (pathname === href) return true;
+  // Exact hubs: don't treat /coach-portal as a prefix match over its children.
+  if (href === "/coach-portal") return false;
   if (href !== "/home" && pathname.startsWith(`${href}/`)) return true;
   if (
     href === "/chatbot" &&

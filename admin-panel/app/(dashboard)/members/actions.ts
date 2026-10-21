@@ -37,6 +37,18 @@ export async function addMember(formData: FormData) {
   } catch {
     redirect("/users?error=taken");
   }
+
+  const sendInvite = formData.get("send_invite") === "on" || formData.get("send_invite") === "true";
+  if (sendInvite) {
+    const { sendStaffInvite } = await import("@/lib/email");
+    await sendStaffInvite({
+      to: email,
+      name,
+      password,
+      companyName: organization.name,
+    });
+  }
+
   revalidatePath("/users");
   revalidatePath("/members");
 }

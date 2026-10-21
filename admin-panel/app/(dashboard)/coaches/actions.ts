@@ -223,8 +223,9 @@ export async function removeCoachImage(coachId: string, imageUrl: string): Promi
 export async function setCoachAccountCredentials(
   coachId: string,
   username: string,
-  password: string
-): Promise<{ error?: string }> {
+  password: string,
+  sendEmailInvite = false
+): Promise<{ error?: string; emailed?: boolean; emailError?: string }> {
   await requireEditor();
   if (!username?.trim()) return { error: "Username is required" };
   if (!password || password.length < 8) return { error: "Password must be at least 8 characters" };
@@ -233,7 +234,7 @@ export async function setCoachAccountCredentials(
   const passwordHash = await bcrypt.hash(password, 10);
 
   try {
-      await pool.query(
+    await pool.query(
       `INSERT INTO coach_accounts (coach_id, username, password_hash, must_change_password)
        VALUES ($1, $2, $3, true)
        ON CONFLICT (coach_id) DO UPDATE SET username = $2, password_hash = $3, must_change_password = true`,
@@ -246,8 +247,36 @@ export async function setCoachAccountCredentials(
     return { error: "Failed to save login" };
   }
 
+  let emailed = false;
+  let emailError: string | undefined;
+  if (sendEmailInvite) {
+    const coach = await pool.query(
+      `SELECT c.coach_name, c.email, o.name AS company_name
+       FROM coaches c
+       LEFT JOIN organizations o ON o.id = c.organization_id
+       WHERE c.id = $1`,
+      [coachId]
+    );
+    const row = coach.rows[0];
+    const to = String(row?.email || "").trim();
+    if (!to) {
+      emailError = "Coach profile has no email address.";
+    } else {
+      const { sendCoachInvite } = await import("@/lib/email");
+      const result = await sendCoachInvite({
+        to,
+        coachName: row.coach_name || username.trim(),
+        username: username.trim(),
+        password,
+        companyName: row.company_name || "Opas",
+      });
+      emailed = result.ok;
+      if (!result.ok) emailError = result.error;
+    }
+  }
+
   revalidatePath(`/coaches/${coachId}`);
-  return {};
+  return { emailed, emailError };
 }
 
 export async function getCoachAccountUsername(coachId: string): Promise<string | null> {

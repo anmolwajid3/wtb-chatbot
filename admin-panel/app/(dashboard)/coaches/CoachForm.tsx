@@ -359,6 +359,7 @@ export default async function CoachForm({ coach }: { coach: CoachRecord }) {
           <CoachAccountManager
             coachId={String(coach.id)}
             existingUsername={existingUsername}
+            coachEmail={val(coach, "email")}
             setCredentials={setCoachAccountCredentials}
           />
         </Section>

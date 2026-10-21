@@ -145,6 +145,14 @@ export default async function UsersPage({
                 <option value="org_admin">{t(locale, "members.admin")}</option>
               </select>
             </label>
+            <label className="flex items-start gap-2 text-sm text-neutral-300 md:col-span-2">
+              <input type="checkbox" name="send_invite" value="on" defaultChecked className="mt-1" />
+              <span>
+                {locale === "fi"
+                  ? "Lähetä sähköposti, jossa on sähköposti ja salasana"
+                  : "Email them their email and password"}
+              </span>
+            </label>
             <div>
               <button type="submit" className="rounded-md bg-amber-500 px-4 py-2 font-medium text-black">
                 {t(locale, "members.add")}

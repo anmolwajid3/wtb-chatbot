@@ -179,6 +179,16 @@ fly secrets set \
   BACKEND_URL="https://opas-api.fly.dev"
 ```
 
+Optional — email login invites when an admin creates a staff user or coach portal account ([Resend](https://resend.com)):
+
+```bash
+fly secrets set \
+  RESEND_API_KEY="re_..." \
+  EMAIL_FROM="WTB <onboarding@your-verified-domain.com>" \
+  APP_BASE_URL="https://opas-admin.fly.dev" \
+  -a opas-admin
+```
+
 Required for company logos and coach image uploads (Supabase Storage):
 
 1. In Supabase → **Storage** → create a **public** bucket named `company-logos`
