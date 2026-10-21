@@ -74,7 +74,7 @@ def test_finnish_coach_pick_reply(monkeypatch):
         "reply_locale": "fi",
         "messages": [],
         "gathered_slots": {"timing": "noin kuukauden päästä"},
-        "matched_coaches": [],
+        "matched_coaches": ["coach-1"],
         "mood_history": [],
         "organization_id": None,
         "outcome": "matched",

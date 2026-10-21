@@ -228,7 +228,9 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
     """
     state = _conversations_in_memory.get(conversation_id)
     if state is None:
-        reply = "This conversation seems to have expired — please start a new one and I'll help you again."
+        reply = (
+            "Keskustelu näyttää vanhentuneen — aloita uusi, niin autan uudelleen."
+        )
         return {
             "conversation_id": conversation_id,
             "reply": reply,
@@ -238,9 +240,14 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
             **_empty_debug_fields(),
         }
 
+    locale = _reply_locale(state)
     matched_ids = state.get("matched_coaches", [])
     if selected_coach_id not in matched_ids:
-        reply = "I couldn't match that selection to what was offered — could you try again?"
+        reply = (
+            "En saanut yhdistettyä valintaa tarjottuihin vaihtoehtoihin — kokeile vielä kerran."
+            if locale == "fi"
+            else "I couldn't match that selection to what was offered — could you try again?"
+        )
         state["messages"].append({"role": "assistant", "content": reply})
         _conversations_in_memory[conversation_id] = state
         return {
@@ -254,8 +261,12 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
 
     coach_records = fetch_coaches_by_ids([selected_coach_id])
     coach = coach_records[0] if coach_records else {}
-    coach_name = coach.get("coach_name", "that coach")
-    program_name = coach.get("program_name", "")
+    if locale == "fi":
+        coach_name = coach.get("coach_name") or "valmentaja"
+        program_name = coach.get("program_name") or "ohjelma"
+    else:
+        coach_name = coach.get("coach_name") or "that coach"
+        program_name = coach.get("program_name") or ""
 
     # Narrow down to just the one chosen coach — this is what the Summarizer
     # will compile the quote request against on a later turn. coach_selected
@@ -266,7 +277,6 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
     state["coach_selected"] = True
     state["post_selection_turns"] = 0
 
-    locale = _reply_locale(state)
     known = _known_fit_sentence(state)
     if locale == "fi":
         reply = (
