@@ -6,23 +6,19 @@ import { useRouter } from "next/navigation";
 export default function CoachAccountManager({
   coachId,
   existingUsername,
-  coachEmail,
   setCredentials,
 }: {
   coachId: string;
   existingUsername: string | null;
-  coachEmail?: string | null;
   setCredentials: (
     coachId: string,
     username: string,
-    password: string,
-    sendEmail: boolean
-  ) => Promise<{ error?: string; emailed?: boolean; emailError?: string }>;
+    password: string
+  ) => Promise<{ error?: string }>;
 }) {
   const router = useRouter();
   const [username, setUsername] = useState(existingUsername || "");
   const [password, setPassword] = useState("");
-  const [sendMail, setSendMail] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,20 +27,12 @@ export default function CoachAccountManager({
     setSaving(true);
     setError(null);
     setMessage(null);
-    const result = await setCredentials(coachId, username, password, sendMail);
+    const result = await setCredentials(coachId, username, password);
     setSaving(false);
     if (result.error) {
       setError(result.error);
     } else {
-      let text = existingUsername ? "Login updated." : "Login created.";
-      if (sendMail) {
-        text += result.emailed
-          ? " Credentials emailed."
-          : result.emailError
-            ? ` Email not sent: ${result.emailError}`
-            : " Email not sent.";
-      }
-      setMessage(text);
+      setMessage(existingUsername ? "Login updated." : "Login created.");
       setPassword("");
       router.refresh();
     }
@@ -74,24 +62,6 @@ export default function CoachAccountManager({
           onChange={(e) => setPassword(e.target.value)}
           className="mt-1 w-full bg-black border border-neutral-700 rounded-md px-3 py-2 text-sm text-neutral-100 focus:outline-none focus:border-amber-500"
         />
-      </label>
-      <label className="flex items-start gap-2 text-sm text-neutral-300">
-        <input
-          type="checkbox"
-          checked={sendMail}
-          onChange={(e) => setSendMail(e.target.checked)}
-          className="mt-1"
-        />
-        <span>
-          Email username and password to the coach
-          {coachEmail ? (
-            <span className="block text-xs text-neutral-500">{coachEmail}</span>
-          ) : (
-            <span className="block text-xs text-amber-500">
-              Save an email on this profile first so the invite can be delivered.
-            </span>
-          )}
-        </span>
       </label>
       <button
         type="button"

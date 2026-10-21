@@ -23,7 +23,6 @@ export type Organization = {
   reply_language: string;
   widget_theme: string;
   widget_accent: string;
-  invite_from_email: string | null;
 };
 
 export type Workspace = {
@@ -54,8 +53,7 @@ export async function getWorkspace(): Promise<Workspace | null> {
             max_matches, min_match_score, followup_turns, show_match_score, logo_url,
             COALESCE(reply_language, 'auto') AS reply_language,
             COALESCE(widget_theme, 'dark') AS widget_theme,
-            COALESCE(widget_accent, '#FFFFFF') AS widget_accent,
-            invite_from_email
+            COALESCE(widget_accent, '#FFFFFF') AS widget_accent
      FROM organizations WHERE id = $1`,
     [organizationId]
   );

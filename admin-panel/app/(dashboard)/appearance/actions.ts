@@ -16,23 +16,15 @@ export async function saveAppearance(formData: FormData) {
   const widgetTheme = String(formData.get("widget_theme") || "dark");
   let accent = String(formData.get("widget_accent") || "#FFFFFF").trim();
   if (!/^#[0-9A-Fa-f]{6}$/.test(accent)) accent = "#FFFFFF";
-  const inviteFrom = String(formData.get("invite_from_email") || "").trim();
-  const safeInviteFrom =
-    !inviteFrom
-      ? null
-      : /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteFrom) ||
-          /^.+\s*<[^\s@]+@[^\s@]+\.[^\s@]+>$/.test(inviteFrom)
-        ? inviteFrom
-        : null;
 
   const safeLang = ["auto", "en", "fi"].includes(replyLanguage) ? replyLanguage : "auto";
   const safeTheme = widgetTheme === "light" ? "light" : "dark";
 
   await getPool().query(
     `UPDATE organizations
-     SET reply_language = $1, widget_theme = $2, widget_accent = $3, invite_from_email = $4
-     WHERE id = $5`,
-    [safeLang, safeTheme, accent, safeInviteFrom, workspace.organization.id]
+     SET reply_language = $1, widget_theme = $2, widget_accent = $3
+     WHERE id = $4`,
+    [safeLang, safeTheme, accent, workspace.organization.id]
   );
   revalidatePath("/appearance");
   revalidatePath("/settings");

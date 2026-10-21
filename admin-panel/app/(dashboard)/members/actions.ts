@@ -37,22 +37,6 @@ export async function addMember(formData: FormData) {
   } catch {
     redirect("/users?error=taken");
   }
-
-  const sendInvite = formData.get("send_invite") === "on" || formData.get("send_invite") === "true";
-  if (sendInvite) {
-    const { sendStaffInvite } = await import("@/lib/email");
-    const orgRow = await pool.query(`SELECT invite_from_email FROM organizations WHERE id = $1`, [
-      organization.id,
-    ]);
-    await sendStaffInvite({
-      to: email,
-      name,
-      password,
-      companyName: organization.name,
-      fromEmail: orgRow.rows[0]?.invite_from_email || organization.invite_from_email,
-    });
-  }
-
   revalidatePath("/users");
   revalidatePath("/members");
 }
