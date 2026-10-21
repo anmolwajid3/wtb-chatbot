@@ -1,5 +1,14 @@
 import { redirect } from "next/navigation";
-import { addProfileField, addProfileSection, deleteProfileField, deleteProfileSection, moveProfileField, updateProfileField } from "./actions";
+import { Breadcrumbs } from "../../components/Breadcrumbs";
+import {
+  addProfileField,
+  addProfileSection,
+  deleteProfileField,
+  deleteProfileSection,
+  moveProfileField,
+  reactivateProfileField,
+  updateProfileField,
+} from "./actions";
 import { FieldForm } from "./FieldForm";
 import { getLocale, t } from "@/lib/i18n";
 import { PROFILE_SECTION_TITLES, sectionForField } from "@/lib/profileSections";
@@ -18,7 +27,7 @@ export default async function ProfileStructurePage({
 
   const params = await searchParams;
   const locale = await getLocale();
-  const fields = await listProfileFields(organization.id);
+  const fields = await listProfileFields(organization.id, { includeInactive: true });
   const ownSections = !(fields.some((field) => field.is_builtin));
   const savedSections = ownSections ? await listProfileSections(organization.id) : [];
   const sections = ownSections ? savedSections.map((section) => section.title) : PROFILE_SECTION_TITLES;
@@ -49,17 +58,31 @@ export default async function ProfileStructurePage({
     grouped.set(name, [...(grouped.get(name) || []), field]);
   }
 
+  const disabledLabel = locale === "fi" ? "Poissa käytöstä" : "Disabled";
+  const restoreLabel = locale === "fi" ? "Palauta" : "Restore";
+
   return (
     <div className="max-w-3xl mx-auto p-8">
+      <Breadcrumbs
+        items={[
+          { href: "/home", label: locale === "fi" ? "Koti" : "Home" },
+          { href: "/chatbot", label: "Chatbot" },
+          {
+            label:
+              locale === "fi"
+                ? `${organization.profile_label}-kentät`
+                : `${organization.profile_label} fields`,
+          },
+        ]}
+      />
       <h1 className="font-display text-3xl text-neutral-100 mb-1">
         {t(locale, "fields.title", { label: organization.profile_label, name: organization.name })}
       </h1>
-      <p className="text-neutral-400 mb-2">
+      <p className="text-neutral-400 mb-6">
         {ownSections
           ? t(locale, "fields.setup", { person: organization.profile_label })
           : t(locale, "fields.lede", { label: organization.profile_label, name: organization.name })}
       </p>
-      {!ownSections && <p className="text-sm text-neutral-500 mb-6">{t(locale, "fields.later")}</p>}
       {ownSections && sections.length === 0 && (
         <p className="text-sm text-neutral-500 mb-6">{t(locale, "fields.noSections")}</p>
       )}
@@ -103,13 +126,19 @@ export default async function ProfileStructurePage({
           <ul className="divide-y divide-neutral-800 border border-neutral-800 rounded-lg bg-neutral-900">
             {rows.map((field) => {
               const index = fields.findIndex((item) => item.id === field.id);
+              const inactive = field.is_active === false;
               return (
-                <li key={field.id} className="px-4 py-3">
+                <li key={field.id} className={`px-4 py-3 ${inactive ? "opacity-60" : ""}`}>
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <p className="text-neutral-100">
                         {field.label}
                         {field.required ? " *" : ""}
+                        {inactive && (
+                          <span className="ml-2 text-xs rounded bg-neutral-800 px-2 py-0.5 text-neutral-400">
+                            {disabledLabel}
+                          </span>
+                        )}
                       </p>
                       <p className="text-xs text-neutral-500">
                         {t(locale, `fields.${field.field_type}`)}
@@ -138,7 +167,15 @@ export default async function ProfileStructurePage({
                           {t(locale, "fields.down")}
                         </button>
                       </form>
-                      {!field.is_builtin && (
+                      {!field.is_builtin && inactive && (
+                        <form action={reactivateProfileField}>
+                          <input type="hidden" name="id" value={field.id} />
+                          <button type="submit" className="text-sm text-amber-400 hover:underline">
+                            {restoreLabel}
+                          </button>
+                        </form>
+                      )}
+                      {!field.is_builtin && !inactive && (
                         <form action={deleteProfileField}>
                           <input type="hidden" name="id" value={field.id} />
                           <button type="submit" className="text-sm text-neutral-500 hover:text-red-400">
@@ -148,17 +185,19 @@ export default async function ProfileStructurePage({
                       )}
                     </div>
                   </div>
-                  <details className="mt-2">
-                    <summary className="cursor-pointer text-sm text-neutral-400">{t(locale, "fields.edit")}</summary>
-                    <div className="mt-3">
-                      <FieldForm
-                        action={updateProfileField}
-                        sections={sections}
-                        field={field}
-                        copy={{ ...copy, submit: t(locale, "fields.save") }}
-                      />
-                    </div>
-                  </details>
+                  {!inactive && (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-sm text-neutral-400">{t(locale, "fields.edit")}</summary>
+                      <div className="mt-3">
+                        <FieldForm
+                          action={updateProfileField}
+                          sections={sections}
+                          field={field}
+                          copy={{ ...copy, submit: t(locale, "fields.save") }}
+                        />
+                      </div>
+                    </details>
+                  )}
                 </li>
               );
             })}

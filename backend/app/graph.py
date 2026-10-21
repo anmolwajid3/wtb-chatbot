@@ -27,7 +27,7 @@ import re
 from typing import TypedDict, Annotated
 from langgraph.graph import StateGraph, END
 
-from app.agents.intent_router import run_intent_router
+from app.agents.intent_router import run_intent_router, _price_question_text
 from app.agents.mood_tone import run_mood_tone
 from app.agents.coach_matcher import run_coach_matcher
 from app.agents.formatter import run_formatter
@@ -37,11 +37,18 @@ from app.agents.summarizer import run_summarizer
 from app.db.connection import save_conversation_state, fetch_coaches_by_ids
 
 
+def _reply_locale(state: dict | None = None) -> str:
+    loc = ((state or {}).get("reply_locale") or "fi").lower()
+    return "en" if loc == "en" else "fi"
+
+
 class ChatState(TypedDict):
     conversation_id: str
     organization_id: str | None
     messages: list  # [{"role": "user"|"assistant", "content": str}]
     turn_count: int
+    intake_turn_count: int
+    reply_locale: str
     gathered_slots: dict
     ready_to_match: bool
     detected_mood: str
@@ -70,12 +77,24 @@ def _route_after_intent(state: ChatState) -> str:
     return "end_spam" if state.get("outcome") == "spam" else "mood_tone"
 
 
-def _spam_reply_node(state: ChatState) -> ChatState:
-    state["final_reply"] = (
+_SPAM_REPLY = {
+    "en": (
         "Thanks for reaching out! It looks like this message might not be related "
         "to these services — if I've misunderstood, feel free to try again "
         "describing what you're looking for."
-    )
+    ),
+    "fi": (
+        "Kiitos yhteydenotosta! Tämä viesti ei näytä liittyvän näihin palveluihin — "
+        "jos ymmärsin väärin, kerro uudestaan mitä etsit."
+    ),
+}
+
+
+def _spam_reply_node(state: ChatState) -> ChatState:
+    locale = state.get("reply_locale") or "fi"
+    if locale == "sv":
+        locale = "fi"
+    state["final_reply"] = _SPAM_REPLY.get(locale, _SPAM_REPLY["fi"])
     return state
 
 
@@ -181,6 +200,8 @@ def _empty_debug_fields() -> dict:
     """Shared defaults for the debug_* fields on response paths that don't run the full graph."""
     return {
         "debug_turn_count": 0,
+        "debug_intake_turn_count": 0,
+        "debug_example_phrases": [],
         "debug_gathered_slots": {},
         "debug_ready_to_match": False,
         "debug_off_topic_detected": False,
@@ -207,7 +228,9 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
     """
     state = _conversations_in_memory.get(conversation_id)
     if state is None:
-        reply = "This conversation seems to have expired — please start a new one and I'll help you again."
+        reply = (
+            "Keskustelu näyttää vanhentuneen — aloita uusi, niin autan uudelleen."
+        )
         return {
             "conversation_id": conversation_id,
             "reply": reply,
@@ -217,9 +240,14 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
             **_empty_debug_fields(),
         }
 
+    locale = _reply_locale(state)
     matched_ids = state.get("matched_coaches", [])
     if selected_coach_id not in matched_ids:
-        reply = "I couldn't match that selection to what was offered — could you try again?"
+        reply = (
+            "En saanut yhdistettyä valintaa tarjottuihin vaihtoehtoihin — kokeile vielä kerran."
+            if locale == "fi"
+            else "I couldn't match that selection to what was offered — could you try again?"
+        )
         state["messages"].append({"role": "assistant", "content": reply})
         _conversations_in_memory[conversation_id] = state
         return {
@@ -233,8 +261,12 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
 
     coach_records = fetch_coaches_by_ids([selected_coach_id])
     coach = coach_records[0] if coach_records else {}
-    coach_name = coach.get("coach_name", "that coach")
-    program_name = coach.get("program_name", "")
+    if locale == "fi":
+        coach_name = coach.get("coach_name") or "valmentaja"
+        program_name = coach.get("program_name") or "ohjelma"
+    else:
+        coach_name = coach.get("coach_name") or "that coach"
+        program_name = coach.get("program_name") or ""
 
     # Narrow down to just the one chosen coach — this is what the Summarizer
     # will compile the quote request against on a later turn. coach_selected
@@ -245,10 +277,17 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
     state["coach_selected"] = True
     state["post_selection_turns"] = 0
 
-    reply = (
-        f"Great choice, {coach_name}'s {program_name} it is.{_known_fit_sentence(state)} "
-        f"Could I get your name and email so the team can follow up with next steps?"
-    )
+    known = _known_fit_sentence(state)
+    if locale == "fi":
+        reply = (
+            f"Hyvä valinta — {program_name} valmentajalta {coach_name}.{known} "
+            f"Voisinko saada nimesi ja sähköpostisi, jotta tiimi voi hoitaa seuraavat askeleet?"
+        )
+    else:
+        reply = (
+            f"Great choice, {coach_name}'s {program_name} it is.{known} "
+            f"Could I get your name and email so the team can follow up with next steps?"
+        )
     state["messages"].append({
         "role": "user",
         "content": f"[Selected {coach_name} — {program_name} from the recommendations]",
@@ -275,27 +314,54 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
     }
 
 
-_PRICE_ASK = re.compile(r"\b(price|pricing|cost|how much|fee|fees|charg\w*)\b", re.I)
 _EMAIL = re.compile(r"[\w.+-]+@[\w.-]+\.\w+")
-_FORMAT = re.compile(r"\b(remote|distributed|virtual|online|hybrid|in[- ]person)\b", re.I)
+_FORMAT = re.compile(
+    r"\b(remote|distributed|virtual|online|hybrid|in[- ]person|"
+    r"etänä|etäyhteydellä|etä|lähinä|paikan\s*päällä|lähivalmennus|hybridi)\b",
+    re.I,
+)
 _SCHEDULE = re.compile(
-    r"\b(monday|tuesday|wednesday|thursday|friday|schedule|morning|evening|calendar)\b",
+    r"\b(monday|tuesday|wednesday|thursday|friday|schedule|morning|evening|calendar|"
+    r"maanantai|tiistai|keskiviikko|torstai|perjantai|aamu|ilta|kalenteri)\b",
+    re.I,
+)
+_SKIP_OPTIONAL = re.compile(
+    r"^(?:skip|no|nothing|nope|n/a|none|ei|ei mitään|ohita|skipataan)[.!]?$",
     re.I,
 )
 
 
+def _format_label(raw: str, locale: str) -> str:
+    word = raw.lower().replace("-", " ").strip()
+    remoteish = {"distributed", "virtual", "online", "remote", "etä", "etänä", "etäyhteydellä"}
+    in_person = {"in person", "lähinä", "paikan päällä", "lähivalmennus"}
+    if word in remoteish:
+        return "etänä" if locale == "fi" else "remote"
+    if word in in_person:
+        return "lähinä" if locale == "fi" else "in person"
+    if "hybridi" in word or word == "hybrid":
+        return "hybridinä" if locale == "fi" else "hybrid"
+    return word
+
+
 def _known_fit_facts(state: dict) -> list[str]:
+    locale = _reply_locale(state)
     slots = state.get("gathered_slots") or {}
     need = slots.get("need_description") or ""
     facts = []
     if slots.get("group_size"):
-        facts.append(f"about {slots['group_size']} people")
+        if locale == "fi":
+            facts.append(f"noin {slots['group_size']} henkilöä")
+        else:
+            facts.append(f"about {slots['group_size']} people")
     if slots.get("timing"):
-        facts.append(f"starting {slots['timing']}")
+        if locale == "fi":
+            facts.append(f"aloitus {slots['timing']}")
+        else:
+            facts.append(f"starting {slots['timing']}")
     found_format = _FORMAT.search(need)
     if found_format:
-        word = found_format.group(0).lower().replace("-", " ")
-        facts.append("remote" if word in {"distributed", "virtual", "online"} else word)
+        facts.append(_format_label(found_format.group(0), locale))
     return facts
 
 
@@ -303,20 +369,39 @@ def _known_fit_sentence(state: dict) -> str:
     facts = _known_fit_facts(state)
     if not facts:
         return ""
+    if _reply_locale(state) == "fi":
+        return " Minulla on jo: " + ", ".join(facts) + "."
     return " I already have " + ", ".join(facts) + "."
 
 
 def _missing_optional_details(state: dict) -> list[str]:
+    locale = _reply_locale(state)
     slots = state.get("gathered_slots") or {}
     need = slots.get("need_description") or ""
     missing = []
     if not slots.get("group_size"):
-        missing.append("roughly how many people")
+        missing.append("suunnilleen kuinka monta henkilöä" if locale == "fi" else "roughly how many people")
     if not _FORMAT.search(need):
-        missing.append("whether in-person, remote, or hybrid works best")
+        missing.append(
+            "sopiiko paremmin lähivalmennus, etä vai hybridi"
+            if locale == "fi"
+            else "whether in-person, remote, or hybrid works best"
+        )
     if not _SCHEDULE.search(need):
-        missing.append("any day or time to work around")
+        missing.append(
+            "onko päiviä tai aikoja, joita kannattaa välttää"
+            if locale == "fi"
+            else "any day or time to work around"
+        )
     return missing
+
+
+def _join_missing(missing: list[str], locale: str) -> str:
+    if len(missing) == 1:
+        return missing[0]
+    if locale == "fi":
+        return ", ".join(missing[:-1]) + " ja " + missing[-1]
+    return ", ".join(missing[:-1]) + ", and " + missing[-1]
 
 
 def _selected_coach(state: dict) -> dict:
@@ -329,13 +414,28 @@ def _selected_coach(state: dict) -> dict:
 
 def _selection_reply(state: dict, message: str) -> tuple[str, str]:
     """Answer the message in front of us. Returns the reply and stay, ask, or close."""
+    locale = _reply_locale(state)
     coach = _selected_coach(state)
-    name = coach.get("coach_name") or "that coach"
-    program = coach.get("program_name") or "the program"
+    if locale == "fi":
+        name = coach.get("coach_name") or "valmentaja"
+        program = coach.get("program_name") or "ohjelma"
+    else:
+        name = coach.get("coach_name") or "that coach"
+        program = coach.get("program_name") or "the program"
     known = _known_fit_sentence(state)
 
-    if _PRICE_ASK.search(message):
+    if _price_question_text(message):
         already = (state.get("gathered_slots") or {}).get("contact")
+        if locale == "fi":
+            if already:
+                return (
+                    f"En voi kertoa, mitä {name} veloittaa ohjelmasta {program}. "
+                    f"Tiimi liittää hinnan tarjoukseen, kun he kirjoittavat osoitteeseen {already}.{known}"
+                ), "stay"
+            return (
+                f"En voi kertoa, mitä {name} veloittaa ohjelmasta {program}. "
+                f"Tiimi liittää hinnan tarjoukseen — tarvitsen vielä nimesi ja sähköpostisi.{known}"
+            ), "stay"
         if already:
             return (
                 f"I can't tell you what {name} charges for {program}. "
@@ -353,54 +453,104 @@ def _selection_reply(state: dict, message: str) -> tuple[str, str]:
         state["gathered_slots"] = slots
         missing = _missing_optional_details(state)
         if not missing:
-            facts = ", ".join(_known_fit_facts(state)) or "what you described"
+            fallback = "kuvaamasi tilanne" if locale == "fi" else "what you described"
+            facts = ", ".join(_known_fit_facts(state)) or fallback
+            if locale == "fi":
+                return (
+                    f"Kiitos. Lähetän tiimille ohjelman {program} ({name}) näillä tiedoilla: {facts}. "
+                    f"He ottavat yhteyttä osoitteeseen {email.group(0)}."
+                ), "close"
             return (
                 f"Thank you. I'll send {name}'s {program} to the team with {facts}. "
                 f"They'll follow up at {email.group(0)}."
             ), "close"
-        if len(missing) == 1:
-            ask = missing[0]
-        else:
-            ask = ", ".join(missing[:-1]) + ", and " + missing[-1]
+        ask = _join_missing(missing, locale)
+        if locale == "fi":
+            return (
+                f"Kiitos. Käytän osoitetta {email.group(0)} jatkoyhteydenottoon ohjelmasta {program}.{known} "
+                f"Jos tiedät, {ask}? Voit myös ohittaa."
+            ), "ask"
         return (
             f"Thank you. I'll use {email.group(0)} for the follow-up on {program}.{known} "
             f"If you have it, {ask}? Skipping that is fine."
         ), "ask"
 
     lowered = message.lower()
-    if coach.get("duration") and re.search(r"\b(how long|duration|weeks|length)\b", lowered):
+    duration_ask = re.search(
+        r"\b(how long|duration|weeks|length|kauan|kesto|viikkoa)\b", lowered
+    )
+    format_ask = re.search(
+        r"\b(remote|hybrid|format|online|in person|in-person|etä|lähi|hybridi|muoto)\b",
+        lowered,
+    )
+    if coach.get("duration") and duration_ask:
+        if locale == "fi":
+            return (
+                f"{program} valmentajalta {name} kestää {coach['duration']}.{known} "
+                f"Tarvitsen vielä nimesi ja sähköpostisi, ennen kuin tiimi voi jatkaa."
+            ), "stay"
         return (
             f"{program} with {name} runs {coach['duration']}.{known} "
             f"I still need your name and email before the team can follow up."
         ), "stay"
-    if coach.get("delivery_format") and re.search(r"\b(remote|hybrid|format|online|in person|in-person)\b", lowered):
+    if coach.get("delivery_format") and format_ask:
+        if locale == "fi":
+            return (
+                f"{name} toteuttaa ohjelman {program} muodossa: {coach['delivery_format']}.{known} "
+                f"Tarvitsen vielä nimesi ja sähköpostisi, ennen kuin tiimi voi jatkaa."
+            ), "stay"
         return (
             f"{name} delivers {program} as {coach['delivery_format']}.{known} "
             f"I still need your name and email before the team can follow up."
         ), "stay"
 
+    if locale == "fi":
+        return (
+            f"Tarvitsen vielä nimesi ja sähköpostisi, jotta tiimi voi jatkaa "
+            f"ohjelman {program} ({name}) kanssa.{known}"
+        ), "stay"
     return (
         f"I still need your name and email so the team can follow up on {name}'s {program}.{known}"
     ), "stay"
 
 
 def _closing_reply(state: dict, message: str) -> str:
+    locale = _reply_locale(state)
     coach = _selected_coach(state)
-    name = coach.get("coach_name") or "the coach"
-    program = coach.get("program_name") or "the program"
+    if locale == "fi":
+        name = coach.get("coach_name") or "valmentaja"
+        program = coach.get("program_name") or "ohjelma"
+    else:
+        name = coach.get("coach_name") or "the coach"
+        program = coach.get("program_name") or "the program"
     note = " ".join(message.split())
     if len(note) > 160:
         note = note[:160].rstrip() + "..."
-    if _PRICE_ASK.search(message):
+    if _price_question_text(message):
+        if locale == "fi":
+            return (
+                f"En voi kertoa, mitä {name} veloittaa ohjelmasta {program}. "
+                f"Lähetän tiedot tiimille — he liittävät hinnan tarjoukseen."
+            )
         return (
             f"I can't tell you what {name} charges for {program}. "
             f"I'll send what I have to the team and they'll include the quote when they write."
         )
-    if re.fullmatch(r"(skip|no|nothing|nope|n/a|none)[.!]?", note, re.I):
+    if _SKIP_OPTIONAL.fullmatch(note):
         facts = ", ".join(_known_fit_facts(state))
+        if locale == "fi":
+            extra = f" Minulla on jo: {facts}." if facts else ""
+            return (
+                f"Selvä.{extra} Lähetän tiimille ohjelman {program} ({name}) — he ottavat yhteyttä."
+            )
         extra = f" I already have {facts}." if facts else ""
         return (
             f"No problem.{extra} I'll send {name}'s {program} to the team and they'll be in touch."
+        )
+    if locale == "fi":
+        return (
+            f"Välitän tämän tiimille ohjelman {program} ({name}) kanssa: {note}. "
+            f"He palaavat tarjouksen ja seuraavien askelten kanssa."
         )
     return (
         f"I'll pass that along with {name}'s {program}: {note}. "
@@ -427,7 +577,7 @@ def _handle_post_selection_message(conversation_id: str, message: str) -> dict:
     state = _conversations_in_memory[conversation_id]
     state["messages"].append({"role": "user", "content": message})
 
-    if _PRICE_ASK.search(message) or _EMAIL.search(message) or not state.get("awaiting_optional_details"):
+    if _price_question_text(message) or _EMAIL.search(message) or not state.get("awaiting_optional_details"):
         reply, mode = _selection_reply(state, message)
     else:
         reply, mode = _closing_reply(state, message), "close"
@@ -465,18 +615,36 @@ def forget_conversation(conversation_id: str) -> None:
     _conversations_in_memory.pop(conversation_id, None)
 
 
+def peek_reply_locale(conversation_id: str | None) -> str | None:
+    """Locale already chosen for an in-flight conversation (sticky across turns)."""
+    if not conversation_id:
+        return None
+    state = _conversations_in_memory.get(conversation_id)
+    if not state:
+        return None
+    loc = (state.get("reply_locale") or "").lower()
+    if loc == "sv":
+        return "fi"
+    return loc if loc in {"en", "fi"} else None
+
+
 def run_turn(
     conversation_id: str | None,
     message: str,
     selected_coach_id: str | None = None,
     organization_id: str | None = None,
     record: bool = True,
+    reply_locale: str | None = None,
 ) -> dict:
     if selected_coach_id:
         if not conversation_id:
             return {
                 "conversation_id": conversation_id or "",
-                "reply": "Please start a conversation before selecting a coach.",
+                "reply": (
+                    "Aloita keskustelu ennen valmentajan valintaa."
+                    if (reply_locale or "fi") != "en"
+                    else "Please start a conversation before selecting a coach."
+                ),
                 "outcome": "in_progress",
                 "detected_mood": "neutral",
                 "coach_matches": [],
@@ -494,6 +662,8 @@ def run_turn(
             "conversation_id": conversation_id,
             "messages": [],
             "turn_count": 0,
+            "intake_turn_count": 0,
+            "reply_locale": "fi",
             "gathered_slots": {},
             "ready_to_match": False,
             "detected_mood": "neutral",
@@ -522,6 +692,10 @@ def run_turn(
         state = _conversations_in_memory[conversation_id]
 
     state["organization_id"] = organization_id or state.get("organization_id")
+    if reply_locale:
+        state["reply_locale"] = reply_locale
+    elif not state.get("reply_locale"):
+        state["reply_locale"] = "fi"
 
     state["messages"].append({"role": "user", "content": message})
 
@@ -577,6 +751,10 @@ def run_turn(
         "coach_matches": coach_matches,
         # --- TEMPORARY DEBUG FIELDS — remove once slot-filling behavior is confirmed correct ---
         "debug_turn_count": result_state.get("turn_count", 0),
+        "debug_intake_turn_count": result_state.get("intake_turn_count", 0),
+        "debug_example_phrases": list(
+            (result_state.get("tone_guidance") or {}).get("example_phrases") or []
+        ),
         "debug_gathered_slots": result_state.get("gathered_slots", {}),
         "debug_ready_to_match": result_state.get("ready_to_match", False),
         "debug_guardrail_violated": result_state.get("guardrail_violated", False),

@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { LOCALE_COOKIE, THEME_COOKIE } from "./brand";
 
-export type Locale = "en" | "sv" | "fi";
+export type Locale = "fi" | "en";
 export type Theme = "light" | "dark";
 
 const en = {
@@ -189,7 +189,7 @@ const en = {
   fields: {
     title: "{label} fields",
     lede: "Questions on each {label} profile at {name}. Built-in details stay in place so matching keeps working.",
-    later: "An assistant that drafts these fields from a short description is a later idea. It is not part of this release.",
+    later: "",
     label: "Field label",
     type: "Type",
     options: "Dropdown choices",
@@ -227,232 +227,6 @@ const en = {
     language: "Language",
     themeToLight: "Light",
     themeToDark: "Dark",
-  },
-};
-
-const sv: typeof en = {
-  nav: {
-    home: "Hem",
-    companies: "Företag",
-    people: "Administratörer",
-    profiles: "Profiler",
-    fields: "Fält",
-    backToLab: "Tillbaka till GPT Lab",
-    onHarbor: "på Opas",
-    voice: "Röst",
-    phrases: "Fraser",
-    rules: "Regler",
-    logs: "Samtal",
-    requests: "Förfrågningar",
-    inbox: "Inkorg",
-    model: "Modell",
-    prompts: "Prompter",
-    greetings: "Hälsningar",
-    matching: "Matchning",
-    messages: "Meddelanden",
-    notices: "Aviseringar",
-    diagnostics: "Diagnostik",
-    logout: "Logga ut",
-    allCompanies: "Alla företag",
-  },
-  landing: {
-    kicker: "En arbetsyta från GPT Lab",
-    title: "Matcha människor med rätt vägledare.",
-    lede: "Opas är en enkel arbetsyta för coachföretag, universitet och andra tjänsteteam. GPT Lab driver plattformen. Varje företag tar med sina egna administratörer, medlemmar och profiler.",
-    signIn: "Logga in",
-    admin: "Admin",
-    workspace: "Öppna arbetsytan",
-    adopt: "Samma upplägg kan beskriva coacher, kurser eller rådgivare. Ni väljer fälten.",
-    step1t: "Fråga",
-    step1b: "En besökare beskriver behovet med egna ord.",
-    step2t: "Matcha",
-    step2b: "Opas jämför behovet med profilerna som företaget har lagt in.",
-    step3t: "Lämna över",
-    step3b: "Teamet får en kort sammanfattning och tar samtalet vidare.",
-  },
-  login: {
-    title: "Logga in",
-    lede: "Företagets personer och profiler loggar in här.",
-    account: "Logga in som",
-    companyOption: "Företag",
-    profileOption: "Profil",
-    adminTitle: "Plattformsadmin",
-    adminLede: "GPT Lab loggar in här. Den här dörren är bara för dem som äger Opas.",
-    adminLink: "Inloggning för företag eller profil",
-    email: "E-post",
-    username: "Användarnamn",
-    password: "Lösenord",
-    submit: "Logga in",
-    error: "Inloggningen matchade inte.",
-    db: "Databasen går inte att nå. Kontrollera DATABASE_URL och försök igen.",
-    hint: "GPT Lab loggar in som plattformsadmin. Företagsadministratörer använder kontot de har fått.",
-    profileLink: "Inloggning för profilinnehavare",
-    labTitle: "GPT Lab",
-    labRole: "Superadmin",
-    labBody: "Du äger Opas. Du lägger till företag och öppnar sedan ett av dem.",
-    companyTitle: "Företagsadmin",
-    companyRole: "Admin",
-    companyBody: "Du driver ett företag, till exempel WTB. Du sköter dess coacher, röst och samtal. Företagets medlemmar använder samma dörr.",
-    profileTitle: "Profil",
-    profileRole: "Coach och andra",
-    profileBody: "Du är en person företaget kan matcha en besökare med. Hos WTB är det en coach.",
-    forgot: "Glömt lösenord",
-    join: "Skapa en profil",
-    joinHint: "Företagets admin godkänner den innan du kan logga in.",
-    useLab: "Det här kontot är en plattformsadmin. Logga in på adminsidan.",
-    useCompany: "Det här kontot tillhör ett företag. Använd företagsinloggningen.",
-  },
-  forgot: {
-    title: "Återställ lösenord",
-    lede: "GPT Lab och företagsadmin använder sin e-post. En profil, till exempel en coach hos WTB, använder sitt användarnamn.",
-    staff: "GPT Lab eller företagsadmin",
-    profile: "Profil",
-    identifier: "E-post eller användarnamn",
-    submit: "Skapa återställningslänk",
-    ready: "Länken fungerar en gång och går ut om en timme. Opas skickar inte e-post ännu, så länken visas här.",
-    missing: "Inget konto matchade den e-posten eller det användarnamnet.",
-  },
-  reset: {
-    title: "Välj ett nytt lösenord",
-    password: "Nytt lösenord",
-    confirm: "Bekräfta lösenord",
-    submit: "Spara lösenord",
-    done: "Lösenordet är sparat. Du kan logga in med det nu.",
-    bad: "Länken saknas, har gått ut eller är redan använd.",
-    short: "Använd minst 8 tecken och skriv samma lösenord två gånger.",
-  },
-  join: {
-    title: "Skapa en profil",
-    lede: "Det här loggar inte in dig. Det skickar en förfrågan till företagets admin. Hos WTB blir en godkänd profil en coach.",
-    company: "Företag",
-    name: "Ditt namn",
-    email: "E-post",
-    username: "Användarnamn",
-    password: "Lösenord",
-    note: "Vad du erbjuder",
-    submit: "Skicka för godkännande",
-    sent: "Skickat. {company} granskar det. Du kan logga in som profil när de har godkänt dig.",
-    taken: "Det användarnamnet används redan eller väntar på godkännande.",
-    invalid: "Namn, e-post, användarnamn och ett lösenord på minst 8 tecken behövs.",
-    closed: "Det företaget tar inte emot nya profiler just nu.",
-  },
-  requests: {
-    title: "Profilförfrågningar",
-    lede: "{name} granskar personer som vill gå med som {person}. Godkännande skapar profilen och låter dem logga in. Avslag sparar förfrågan.",
-    empty: "Ingen väntar.",
-    approve: "Godkänn",
-    decline: "Avslå",
-    pending: "Väntar",
-    approved: "Godkänd",
-    declined: "Avslagen",
-    note: "Vad de erbjuder",
-  },
-  home: {
-    title: "Arbetsyta",
-    lede: "Håll assistenten, profilerna och reglerna på ett lugnt ställe.",
-    inside: "Det här är {name}s arbetsyta. {name} sköter sina {people}, deras profiler, rösten och samtalen.",
-    flow: "Så rör sig ett samtal",
-    noCompany: "Öppna ett företag från GPT Lab innan du arbetar i det.",
-    profiles: "Profiler",
-    profilesDesc: "Personerna {name} matchar besökare med.",
-    voice: "Röst",
-    voiceDesc: "Assistentens stadiga sätt att tala.",
-    phrases: "Fraser",
-    phrasesDesc: "Exempelmeningar för olika stämningar.",
-    rules: "Regler",
-    rulesDesc: "Det assistenten aldrig får säga.",
-    companies: "Företag",
-    companiesDesc: "Skapa ett företag och dess första admin.",
-    people: "Administratörer",
-    peopleDesc: "Konton som kan logga in och sköta {name}.",
-    fields: "Fält",
-    fieldsDesc: "Frågorna på varje {person}-profil.",
-    greetingsDesc: "Öppningsraden besökare hör från {name}.",
-    logsDesc: "Samtal besökare har haft med {name}.",
-  },
-  companies: {
-    title: "Företag",
-    lede: "GPT Lab äger Opas och lägger till företag här. Öppna ett företag för att gå in i dess arbetsyta. WTB är ett av företagen: deras personer kallas coacher, och WTB sköter profiler, röst och samtal.",
-    name: "Företagsnamn",
-    slug: "Adressnamn",
-    label: "Vad en person kallas",
-    labelPlural: "Vad de kallas tillsammans",
-    called: "Personer kallas",
-    admins: "Administratörer",
-    enter: "Gå in",
-    add: "Lägg till företag",
-    statusNote: "Arkivera, pausa och ta bort ändrar bara status. Coacher, fält, röst och samtal ligger kvar.",
-    adminName: "Första admin, namn",
-    adminEmail: "Första admin, e-post",
-    adminPassword: "Tillfälligt lösenord",
-    create: "Skapa företag",
-    empty: "Inga företag ännu.",
-    open: "Öppna",
-    need: "Välj ett företag först.",
-    people: "personer",
-    taken: "Den e-posten eller det adressnamnet används redan.",
-    invalid: "Namn, admin och ett lösenord på minst 6 tecken behövs.",
-  },
-  members: {
-    title: "Administratörer",
-    lede: "Inloggningskonton för {name}. {people} sköts på sin egen sida, inte här.",
-    name: "Namn",
-    email: "E-post",
-    password: "Tillfälligt lösenord",
-    role: "Roll",
-    admin: "Admin",
-    member: "Medlem",
-    viewer: "Läsare",
-    analyst: "Analytiker",
-    editor: "Redigerare",
-    add: "Lägg till person",
-    empty: "Ingen annan finns i företaget ännu.",
-    need: "Öppna ett företag innan du lägger till personer.",
-    remove: "Ta bort",
-    you: "Du",
-    taken: "Den e-posten används redan.",
-  },
-  fields: {
-    title: "{label}-fält",
-    lede: "Frågor på varje {label}-profil hos {name}. Inbyggda detaljer finns kvar så att matchningen fungerar.",
-    later: "En assistent som tar fram fälten från en kort beskrivning är en senare idé. Den ingår inte i den här versionen.",
-    label: "Fältets namn",
-    type: "Typ",
-    options: "Rullgardinsval",
-    optionsHint: "Kommaseparerat. Används bara för rullgardiner.",
-    required: "Obligatoriskt",
-    add: "Lägg till fält",
-    empty: "Inga extra fält ännu. Profiler använder fortfarande de inbyggda detaljerna.",
-    text: "Kort text",
-    textarea: "Lång text",
-    dropdown: "Rullgardin",
-    number: "Tal",
-    radio: "Radioknappar",
-    group: "Avsnitt",
-    groupHint: "Den del av profilen frågan hör till, till exempel grunduppgifter.",
-    choices: "Val",
-    choicesHint: "Kommaseparerat. Visas som meny eller radioknappar.",
-    general: "Allmänt",
-    edit: "Redigera",
-    save: "Spara fält",
-    builtin: "Ingår i matchningen. Du kan byta namn och grupp. Det tas inte bort.",
-    builtinShort: "ingår",
-    delete: "Ta bort",
-    up: "Upp",
-    down: "Ner",
-    need: "Öppna ett företag innan du redigerar dess fält.",
-    extra: "Fält som företaget har lagt till",
-    sectionName: "Avsnittets namn",
-    addSection: "Lägg till avsnitt",
-    noSections: "Skapa ett avsnitt först. Lägg sedan till frågorna som hör hemma där.",
-    removeSection: "Ta bort avsnitt",
-    setup: "Skapa avsnitt och frågor innan du lägger till en {person}.",
-    emptyList: "Inga {people} ännu. Lägg till den första för att komma igång.",
-  },
-  common: {
-    language: "Språk",
-    themeToLight: "Ljust",
-    themeToDark: "Mörkt",
   },
 };
 
@@ -641,7 +415,7 @@ const fi: typeof en = {
   fields: {
     title: "Kentät: {label}",
     lede: "Kysymykset jokaisessa {label}-profiilissa yrityksessä {name}. Valmiit tiedot jäävät, jotta yhdistäminen toimii.",
-    later: "Avustaja, joka luonnostelee kentät lyhyestä kuvauksesta, on myöhempi ajatus. Se ei kuulu tähän versioon.",
+    later: "",
     label: "Kentän nimi",
     type: "Tyyppi",
     options: "Pudotusvalikon vaihtoehdot",
@@ -682,12 +456,14 @@ const fi: typeof en = {
   },
 };
 
-const dictionaries = { en, sv, fi };
+const dictionaries = { fi, en };
 
 export async function getLocale(): Promise<Locale> {
   const value = (await cookies()).get(LOCALE_COOKIE)?.value;
-  if (value === "sv" || value === "fi" || value === "en") return value;
-  return "en";
+  if (value === "fi" || value === "en") return value;
+  // Legacy Swedish cookie → Finnish (SV removed).
+  if (value === "sv") return "fi";
+  return "fi";
 }
 
 export async function getTheme(): Promise<Theme> {
@@ -705,7 +481,7 @@ export function t(locale: Locale, path: string, vars?: Record<string, string>): 
     }
     return typeof node === "string" ? node : undefined;
   };
-  let text = read(locale) ?? read("en") ?? path;
+  let text = read(locale) ?? read("fi") ?? read("en") ?? path;
   if (vars) {
     for (const [key, value] of Object.entries(vars)) {
       text = text.replaceAll(`{${key}}`, value);

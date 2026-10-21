@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { STARTER_GUARDRAILS, STARTER_TONE } from "./brand";
+import { STARTER_GREETINGS_FI, STARTER_GUARDRAILS, STARTER_PHRASES_FI, STARTER_TONE } from "./brand";
 import { getPool } from "./db";
 import { PROFILE_SECTIONS, PROFILE_SECTION_TITLES } from "./profileSections";
 
@@ -49,9 +49,12 @@ const STATEMENTS = [
   `ALTER TABLE conversations ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id)`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free'`,
-  `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS credit_limit INTEGER NOT NULL DEFAULT 50`,
+  `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS credit_limit INTEGER NOT NULL DEFAULT 1000`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS credits_used INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS credits_period_start TIMESTAMPTZ NOT NULL DEFAULT date_trunc('month', now())`,
+  `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS profile_limit INTEGER NOT NULL DEFAULT 50`,
+  `ALTER TABLE organizations ALTER COLUMN credit_limit SET DEFAULT 1000`,
+  `ALTER TABLE organizations ALTER COLUMN profile_limit SET DEFAULT 50`,
   `DO $$
 DECLARE r record;
 BEGIN
@@ -118,6 +121,12 @@ END $$`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS followup_turns INTEGER NOT NULL DEFAULT 2`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS show_match_score BOOLEAN NOT NULL DEFAULT false`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS logo_url TEXT`,
+  `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS reply_language TEXT NOT NULL DEFAULT 'auto'`,
+  `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS widget_theme TEXT NOT NULL DEFAULT 'dark'`,
+  `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS widget_accent TEXT NOT NULL DEFAULT '#FFFFFF'`,
+  `ALTER TABLE conversations ADD COLUMN IF NOT EXISTS review_tag TEXT`,
+  `ALTER TABLE profile_fields ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS quote_requests_conversation_id_uidx ON quote_requests (conversation_id)`,
   `CREATE TABLE IF NOT EXISTS profile_sections (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -180,45 +189,45 @@ async function seedSharedDefaults() {
 }
 
 const WTB_FIELDS: { key: string; label: string; type: "text" | "textarea" | "number" }[] = [
-  { key: "coach_name", label: "Coach name", type: "text" },
-  { key: "company_name", label: "Company / billing name", type: "text" },
-  { key: "business_id", label: "Business ID", type: "text" },
-  { key: "email", label: "Email", type: "text" },
-  { key: "phone", label: "Phone", type: "text" },
-  { key: "website_or_linkedin", label: "Website / LinkedIn", type: "text" },
-  { key: "operating_area", label: "Operating area", type: "text" },
-  { key: "program_name", label: "Program name", type: "text" },
-  { key: "short_description", label: "Short description", type: "textarea" },
-  { key: "long_description", label: "Long description", type: "textarea" },
-  { key: "target_group", label: "Target group", type: "text" },
-  { key: "suited_situations", label: "Suited situations", type: "text" },
-  { key: "key_themes", label: "Key themes", type: "text" },
-  { key: "participant_activities", label: "Participant activities", type: "textarea" },
-  { key: "methods", label: "Methods", type: "text" },
-  { key: "delivery_format", label: "Delivery format", type: "text" },
-  { key: "individual_or_group", label: "Individual or group", type: "text" },
-  { key: "group_size_min", label: "Group size min", type: "number" },
-  { key: "group_size_max", label: "Group size max", type: "number" },
-  { key: "duration", label: "Duration", type: "text" },
-  { key: "program_structure", label: "Program structure", type: "textarea" },
-  { key: "goals", label: "Goals", type: "textarea" },
-  { key: "impact_measurement", label: "Impact measurement", type: "textarea" },
-  { key: "change_achieved", label: "Change achieved", type: "textarea" },
-  { key: "price_from", label: "Price from", type: "text" },
-  { key: "pricing_model", label: "Pricing model", type: "text" },
-  { key: "price_includes", label: "What's included", type: "textarea" },
-  { key: "additional_services", label: "Additional services", type: "textarea" },
-  { key: "references_text", label: "References", type: "textarea" },
-  { key: "results_feedback", label: "Results / feedback", type: "textarea" },
-  { key: "certifications", label: "Certifications", type: "textarea" },
-  { key: "keywords", label: "Keywords", type: "text" },
-  { key: "main_category", label: "Main category", type: "text" },
-  { key: "subcategories", label: "Subcategories", type: "text" },
-  { key: "additional_info", label: "Additional info", type: "textarea" },
-  { key: "availability", label: "Availability", type: "text" },
-  { key: "languages", label: "Languages", type: "text" },
-  { key: "video_url", label: "Video URL", type: "text" },
-  { key: "material_urls", label: "Material URLs", type: "textarea" },
+  { key: "coach_name", label: "Valmentajan nimi", type: "text" },
+  { key: "company_name", label: "Yritys / laskutusnimi", type: "text" },
+  { key: "business_id", label: "Y-tunnus", type: "text" },
+  { key: "email", label: "Sähköposti", type: "text" },
+  { key: "phone", label: "Puhelin", type: "text" },
+  { key: "website_or_linkedin", label: "Verkkosivu / LinkedIn", type: "text" },
+  { key: "operating_area", label: "Toiminta-alue", type: "text" },
+  { key: "program_name", label: "Ohjelman nimi", type: "text" },
+  { key: "short_description", label: "Lyhyt kuvaus", type: "textarea" },
+  { key: "long_description", label: "Pitkä kuvaus", type: "textarea" },
+  { key: "target_group", label: "Kohderyhmä", type: "text" },
+  { key: "suited_situations", label: "Sopivat tilanteet", type: "text" },
+  { key: "key_themes", label: "Avainteemat", type: "text" },
+  { key: "participant_activities", label: "Osallistujien tekemiset", type: "textarea" },
+  { key: "methods", label: "Menetelmät", type: "text" },
+  { key: "delivery_format", label: "Toteutusmuoto", type: "text" },
+  { key: "individual_or_group", label: "Yksilö tai ryhmä", type: "text" },
+  { key: "group_size_min", label: "Ryhmäkoko min", type: "number" },
+  { key: "group_size_max", label: "Ryhmäkoko max", type: "number" },
+  { key: "duration", label: "Kesto", type: "text" },
+  { key: "program_structure", label: "Ohjelman rakenne", type: "textarea" },
+  { key: "goals", label: "Tavoitteet", type: "textarea" },
+  { key: "impact_measurement", label: "Vaikuttavuuden mittaus", type: "textarea" },
+  { key: "change_achieved", label: "Saavutettu muutos", type: "textarea" },
+  { key: "price_from", label: "Hinta alkaen", type: "text" },
+  { key: "pricing_model", label: "Hinnoittelumalli", type: "text" },
+  { key: "price_includes", label: "Hintaan sisältyy", type: "textarea" },
+  { key: "additional_services", label: "Lisäpalvelut", type: "textarea" },
+  { key: "references_text", label: "Referenssit", type: "textarea" },
+  { key: "results_feedback", label: "Tulokset / palaute", type: "textarea" },
+  { key: "certifications", label: "Sertifikaatit", type: "textarea" },
+  { key: "keywords", label: "Avainsanat", type: "text" },
+  { key: "main_category", label: "Pääkategoria", type: "text" },
+  { key: "subcategories", label: "Alakategoriat", type: "text" },
+  { key: "additional_info", label: "Lisätiedot", type: "textarea" },
+  { key: "availability", label: "Saatavuus", type: "text" },
+  { key: "languages", label: "Kielet", type: "text" },
+  { key: "video_url", label: "Videon URL", type: "text" },
+  { key: "material_urls", label: "Materiaalien URL:t", type: "textarea" },
 ];
 
 async function attachUnassigned(table: string, organizationId: string) {
@@ -436,6 +445,153 @@ async function run() {
   await seedSharedDefaults();
   await seedWtbCompany();
   await seedSignInAccounts();
+  await seedFinnishContent();
+}
+
+async function seedFinnishContent() {
+  const pool = getPool();
+  // Tone: only replace the old English starter text
+  await pool.query(
+    `UPDATE tone_settings
+     SET description_text = $1, updated_at = now()
+     WHERE name = 'default_voice'
+       AND (
+         description_text ILIKE '%Warm, clear%'
+         OR description_text ILIKE '%Never robotic%'
+         OR description_text ILIKE '%thoughtful person%'
+       )`,
+    [STARTER_TONE]
+  );
+
+  for (const rule of STARTER_GUARDRAILS) {
+    await pool.query(
+      `UPDATE guardrails SET rule_text = $1
+       WHERE organization_id IS NULL AND category = $2
+         AND (
+           rule_text ILIKE '%Never %'
+           OR rule_text ILIKE '%price%'
+           OR rule_text ILIKE '%medical%'
+           OR rule_text ILIKE '%verified%'
+         )`,
+      [rule.rule_text, rule.category]
+    );
+  }
+
+  const orgs = await pool.query(
+    `SELECT id FROM organizations WHERE slug IN ('wtb', 'what-the-business')`
+  );
+  for (const org of orgs.rows) {
+    const organizationId = org.id as string;
+
+    const englishGreetings = await pool.query(
+      `SELECT 1 FROM opening_greetings
+       WHERE organization_id = $1
+         AND (greeting_text ILIKE 'Hi!%' OR greeting_text ILIKE 'Hey%' OR greeting_text ILIKE 'Welcome!%')
+       LIMIT 1`,
+      [organizationId]
+    );
+    const greetingCount = await pool.query(
+      `SELECT count(*)::int AS n FROM opening_greetings WHERE organization_id = $1`,
+      [organizationId]
+    );
+    if (englishGreetings.rows.length > 0 || greetingCount.rows[0].n === 0) {
+      await pool.query(`DELETE FROM opening_greetings WHERE organization_id = $1`, [organizationId]);
+      for (const greeting of STARTER_GREETINGS_FI) {
+        await pool.query(
+          `INSERT INTO opening_greetings (greeting_text, is_active, organization_id) VALUES ($1, true, $2)`,
+          [greeting, organizationId]
+        );
+      }
+    }
+
+    const englishPhrases = await pool.query(
+      `SELECT 1 FROM example_phrases
+       WHERE organization_id = $1
+         AND (
+           phrase_text ILIKE '%I hear you%'
+           OR phrase_text ILIKE '%Love the energy%'
+           OR phrase_text ILIKE '%Understood.%'
+           OR phrase_text ILIKE '%Exciting direction%'
+         )
+       LIMIT 1`,
+      [organizationId]
+    );
+    const phraseCount = await pool.query(
+      `SELECT count(*)::int AS n FROM example_phrases WHERE organization_id = $1`,
+      [organizationId]
+    );
+    if (englishPhrases.rows.length > 0 || phraseCount.rows[0].n === 0) {
+      await pool.query(`DELETE FROM example_phrases WHERE organization_id = $1`, [organizationId]);
+      for (const phrase of STARTER_PHRASES_FI) {
+        await pool.query(
+          `INSERT INTO example_phrases (situation_type, phrase_text, is_active, organization_id)
+           VALUES ($1, $2, true, $3)`,
+          [phrase.situation_type, phrase.phrase_text, organizationId]
+        );
+      }
+    }
+
+    await pool.query(
+      `UPDATE coaches SET
+         coach_name = CASE
+           WHEN coach_name ILIKE '%John Doe%' THEN 'Juhani Virtanen'
+           WHEN coach_name ILIKE 'Synthetic Coach A%' THEN 'Synteettinen valmentaja A'
+           WHEN coach_name ILIKE 'Synthetic Coach B%' THEN 'Synteettinen valmentaja B'
+           WHEN coach_name ILIKE 'Synthetic Coach C%' THEN 'Synteettinen valmentaja C'
+           ELSE coach_name
+         END,
+         program_name = CASE
+           WHEN program_name ILIKE '%Team Motivation%' THEN 'Tiimin motivaatiosprintti'
+           WHEN program_name ILIKE '%Sustainable Pace%' THEN 'Kestävä tahti -ohjelma'
+           WHEN program_name ILIKE '%Crisis Communication%' THEN 'Kriisiviestinnän bootcamp'
+           WHEN program_name ILIKE '%Executive Growth%' THEN 'Johtajan kasvuparring'
+           ELSE program_name
+         END,
+         short_description = CASE
+           WHEN program_name ILIKE '%Team Motivation%' OR coach_name ILIKE '%John Doe%'
+             THEN 'Neljän viikon hybridiohjelma, joka palauttaa energian ja sitoutumisen matalan motivaation jälkeen.'
+           WHEN program_name ILIKE '%Sustainable Pace%'
+             THEN 'Ohjelma, joka pureutuu ylikuormituksen juurisyihin ja rakentaa kestävän työrytmin.'
+           ELSE short_description
+         END,
+         long_description = CASE
+           WHEN program_name ILIKE '%Team Motivation%' OR coach_name ILIKE '%John Doe%'
+             THEN 'Neljän viikon hybridiohjelma, joka on rakennettu palauttamaan tiimin energia ja sitoutuminen matalan moraalin jakson jälkeen.'
+           WHEN program_name ILIKE '%Sustainable Pace%'
+             THEN 'Viiden viikon ohjelma, jossa selvitetään ylikuormituksen syyt ja rakennetaan käytännön korjaus — lähi- tai hybriditoteutuksena.'
+           ELSE long_description
+         END,
+         main_category = CASE
+           WHEN program_name ILIKE '%Team Motivation%' OR coach_name ILIKE '%John Doe%' THEN 'Tiimikehitys'
+           WHEN program_name ILIKE '%Sustainable Pace%' THEN 'Hyvinvointi ja jaksaminen'
+           ELSE main_category
+         END,
+         languages = CASE
+           WHEN program_name ILIKE '%Team Motivation%'
+             OR program_name ILIKE '%Sustainable Pace%'
+             OR coach_name ILIKE '%John Doe%'
+             OR coach_name ILIKE 'Synthetic Coach%'
+             THEN ARRAY['suomi', 'englanti']
+           ELSE languages
+         END,
+         updated_at = now()
+       WHERE organization_id = $1
+         AND (
+           coach_name ILIKE '%John Doe%'
+           OR coach_name ILIKE 'Synthetic Coach%'
+           OR program_name ILIKE '%Team Motivation%'
+           OR program_name ILIKE '%Sustainable Pace%'
+           OR program_name ILIKE '%Crisis Communication%'
+           OR program_name ILIKE '%Executive Growth%'
+         )`,
+      [organizationId]
+    );
+
+    await pool.query(
+      `UPDATE organizations SET reply_language = 'fi' WHERE id = $1 AND reply_language = 'sv'`,
+      [organizationId]
+    );
+  }
 }
 
 async function seedSignInAccounts() {

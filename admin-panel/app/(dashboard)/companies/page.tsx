@@ -19,7 +19,8 @@ export default async function CompaniesPage({
   const locale = await getLocale();
   const pool = getPool();
   const result = await pool.query(
-    `SELECT o.id, o.name, o.slug, o.profile_label, o.profile_label_plural, o.status, o.plan, o.credit_limit, o.credits_used, o.logo_url,
+    `SELECT o.id, o.name, o.slug, o.profile_label, o.profile_label_plural, o.status, o.plan, o.credit_limit, o.credits_used,
+            COALESCE(o.profile_limit, 50) AS profile_limit, o.logo_url,
             (SELECT count(*)::int FROM users u WHERE u.organization_id = o.id) AS people,
             (SELECT count(*)::int FROM coaches c WHERE c.organization_id = o.id) AS profiles
      FROM organizations o
@@ -46,7 +47,7 @@ export default async function CompaniesPage({
           { label: "Active", value: result.rows.filter((row) => row.status === "active").length },
           { label: t(locale, "nav.profiles"), value: result.rows.reduce((sum, row) => sum + Number(row.profiles), 0) },
           {
-            label: locale === "fi" ? "Viestit tässä kuussa" : locale === "sv" ? "Meddelanden denna månad" : "Messages this month",
+            label: locale === "fi" ? "Viestit tässä kuussa" : "Messages this month",
             value: result.rows.reduce((sum, row) => sum + Number(row.credits_used), 0),
           },
         ].map((card) => (
@@ -59,7 +60,7 @@ export default async function CompaniesPage({
       {result.rows.length > 0 && (
         <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-5 mb-8">
           <h2 className="text-sm font-medium text-neutral-500 mb-4">
-            {locale === "fi" ? "Profiilit yrityksittäin" : locale === "sv" ? "Profiler per företag" : "Profiles by company"}
+            {locale === "fi" ? "Profiilit yrityksittäin" : "Profiles by company"}
           </h2>
           <div className="grid gap-3">
             {result.rows.map((company) => {
@@ -111,10 +112,13 @@ export default async function CompaniesPage({
                   </td>
                   <td className="px-4 py-4 text-neutral-300">
                     <div className="capitalize">{company.plan}</div>
-                    <div className="text-xs text-neutral-500">{company.credits_used}/{company.credit_limit} this month</div>
+                    <div className="text-xs text-neutral-500">
+                      {company.credits_used}/{company.credit_limit}{" "}
+                      {locale === "fi" ? "viestiä / kk" : "msgs / mo"}
+                    </div>
                   </td>
                   <td className="px-4 py-4 text-neutral-300">
-                    {company.profiles} {company.profile_label_plural}
+                    {company.profiles}/{company.profile_limit} {company.profile_label_plural}
                   </td>
                   <td className="px-4 py-4 text-neutral-300">{company.people}</td>
                   <td className="px-4 py-4">
@@ -180,10 +184,32 @@ export default async function CompaniesPage({
                         <label className="text-xs text-neutral-500">
                           Plan
                           <select name="plan" defaultValue={company.plan} className={inputClass}>
-                            <option value="free">Free · 50 messages</option>
-                            <option value="pro">Pro · 1,000 messages</option>
-                            <option value="enterprise">Enterprise · 10,000 messages</option>
+                            <option value="free">Free</option>
+                            <option value="pro">Pro</option>
+                            <option value="enterprise">Enterprise</option>
                           </select>
+                        </label>
+                        <label className="text-xs text-neutral-500">
+                          {locale === "fi" ? "Viestikiintiö / kk" : "Monthly message limit"}
+                          <input
+                            type="number"
+                            name="credit_limit"
+                            min={1}
+                            max={1000000}
+                            defaultValue={company.credit_limit}
+                            className={inputClass}
+                          />
+                        </label>
+                        <label className="text-xs text-neutral-500">
+                          {locale === "fi" ? "Valmentajien maksimi" : "Coach / profile limit"}
+                          <input
+                            type="number"
+                            name="profile_limit"
+                            min={1}
+                            max={500}
+                            defaultValue={company.profile_limit}
+                            className={inputClass}
+                          />
                         </label>
                         <button type="submit" className="bg-amber-500 text-black text-sm font-medium px-3 py-1.5 rounded-md">
                           Save company
@@ -228,13 +254,25 @@ export default async function CompaniesPage({
             <span className="text-sm text-neutral-400">{t(locale, "companies.adminEmail")}</span>
             <input type="email" name="admin_email" required className={inputClass} />
           </label>
-          <label className="block md:col-span-2">
-            <span className="text-sm text-neutral-400">Plan and monthly messages</span>
+          <label className="block">
+            <span className="text-sm text-neutral-400">Plan</span>
             <select name="plan" defaultValue="free" className={inputClass}>
-              <option value="free">Free · 50 messages. Stops when they are used.</option>
-              <option value="pro">Pro · 1,000 messages. Stops when they are used.</option>
-              <option value="enterprise">Enterprise · 10,000 messages. Stops when they are used.</option>
+              <option value="free">Free</option>
+              <option value="pro">Pro</option>
+              <option value="enterprise">Enterprise</option>
             </select>
+          </label>
+          <label className="block">
+            <span className="text-sm text-neutral-400">
+              {locale === "fi" ? "Viestikiintiö / kk" : "Monthly message limit"}
+            </span>
+            <input type="number" name="credit_limit" min={1} max={1000000} defaultValue={1000} className={inputClass} />
+          </label>
+          <label className="block md:col-span-2">
+            <span className="text-sm text-neutral-400">
+              {locale === "fi" ? "Valmentajien maksimi" : "Coach / profile limit"}
+            </span>
+            <input type="number" name="profile_limit" min={1} max={500} defaultValue={50} className={inputClass} />
           </label>
           <p className="md:col-span-2 text-sm text-neutral-500">
             The first person is the company admin. People added later can be a viewer, an analyst, or an editor.

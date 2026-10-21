@@ -162,11 +162,50 @@ export async function deleteProfileField(formData: FormData) {
   const id = String(formData.get("id") || "");
   if (!id) return;
   const pool = getPool();
-  await pool.query(
-    `DELETE FROM profile_fields WHERE id = $1 AND organization_id = $2 AND is_builtin = false`,
+  const field = await pool.query(
+    `SELECT field_key, is_builtin FROM profile_fields WHERE id = $1 AND organization_id = $2`,
+    [id, organization.id]
+  );
+  if (!field.rows[0] || field.rows[0].is_builtin) return;
+
+  const key = field.rows[0].field_key as string;
+  const inUse = await pool.query(
+    `SELECT 1 FROM coaches
+     WHERE organization_id = $1
+       AND custom_fields ? $2
+       AND NULLIF(BTRIM(custom_fields->>$2), '') IS NOT NULL
+     LIMIT 1`,
+    [organization.id, key]
+  );
+
+  if (inUse.rows.length > 0) {
+    // Soft-disable: keep historical values, hide from new profiles.
+    await pool.query(
+      `UPDATE profile_fields SET is_active = false, required = false
+       WHERE id = $1 AND organization_id = $2 AND is_builtin = false`,
+      [id, organization.id]
+    );
+  } else {
+    await pool.query(
+      `DELETE FROM profile_fields WHERE id = $1 AND organization_id = $2 AND is_builtin = false`,
+      [id, organization.id]
+    );
+  }
+  revalidatePath("/profile-structure");
+  revalidatePath("/coaches");
+}
+
+export async function reactivateProfileField(formData: FormData) {
+  const organization = await requireOrg();
+  const id = String(formData.get("id") || "");
+  if (!id) return;
+  await getPool().query(
+    `UPDATE profile_fields SET is_active = true
+     WHERE id = $1 AND organization_id = $2 AND is_builtin = false`,
     [id, organization.id]
   );
   revalidatePath("/profile-structure");
+  revalidatePath("/coaches");
 }
 
 export async function moveProfileField(formData: FormData) {

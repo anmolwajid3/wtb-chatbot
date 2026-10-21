@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { logoutAction } from "../actions";
 import { closeCompany } from "./companies/actions";
-import { Preferences } from "../components/Preferences";
-import { HarborMark } from "../components/HarborMark";
+import { HeaderBar } from "../components/HeaderBar";
+import { NavIcon } from "../components/NavIcon";
+import { SideNav, type SideNavItem } from "../components/SideNav";
 import { getLocale, getTheme, t } from "@/lib/i18n";
 import { canAnalyze, canEditCompany, canManageCompany } from "@/lib/plans";
+import { getPool } from "@/lib/db";
 import { getWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
@@ -26,107 +27,120 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const path = (await headers()).get("x-harbor-path") || "";
   const platformPath = path.startsWith("/companies") || path.startsWith("/notices");
   const inCompany = Boolean(organization) && !platformPath;
-  const person = organization?.profile_label || t(locale, "nav.profiles");
   const people = organization?.profile_label_plural || t(locale, "nav.profiles");
 
-  const links = inCompany
-    ? [
-        { href: "/home", label: t(locale, "nav.home") },
-        { href: "/announcements", label: t(locale, "nav.notices") },
-        { href: "/coaches", label: people },
-        { href: "/profile-requests", label: t(locale, "nav.requests"), show: canManageCompany(session.role) },
-        { href: "/profile-structure", label: t(locale, "fields.title", { label: person, name: organization?.name || "" }), show: canEditCompany(session.role) },
-        { href: "/tone", label: t(locale, "nav.voice"), show: canEditCompany(session.role) },
-        { href: "/phrases", label: t(locale, "nav.phrases"), show: canEditCompany(session.role) },
-        { href: "/guardrails", label: t(locale, "nav.rules"), show: canEditCompany(session.role) },
-        { href: "/diagnostics", label: t(locale, "nav.diagnostics"), show: canEditCompany(session.role) },
-        { href: "/greetings", label: t(locale, "nav.greetings"), show: canEditCompany(session.role) },
-        { href: "/matching", label: t(locale, "nav.matching"), show: canManageCompany(session.role) },
-        { href: "/messages", label: t(locale, "nav.messages"), show: canManageCompany(session.role) },
-        { href: "/logs", label: t(locale, "nav.logs") },
-        { href: "/queries", label: t(locale, "nav.inbox") },
-        { href: "/members", label: t(locale, "nav.people"), show: canManageCompany(session.role) },
-        { href: "/llm-settings", label: t(locale, "nav.model"), show: canAnalyze(session.role) },
-        { href: "/master-prompts", label: t(locale, "nav.prompts"), show: canEditCompany(session.role) },
-      ]
-    : [
-        { href: "/companies", label: t(locale, "nav.companies") },
-        { href: "/notices", label: t(locale, "nav.notices") },
-      ];
+  const companyLinks: SideNavItem[] = [
+    { href: "/home", label: t(locale, "nav.home"), icon: "home" },
+    { href: "/coaches", label: people, icon: "coaches" },
+    { href: "/logs", label: locale === "fi" ? "Keskustelut" : "Conversations", icon: "chat" },
+    { href: "/queries", label: t(locale, "nav.inbox"), icon: "inbox" },
+    {
+      href: "/chatbot",
+      label: locale === "fi" ? "Chatbot" : "Chatbot",
+      icon: "voice",
+      show: canEditCompany(session.role) || canManageCompany(session.role),
+    },
+    {
+      href: "/users",
+      label: locale === "fi" ? "Käyttäjähallinta" : "User management",
+      icon: "users",
+      show: canManageCompany(session.role),
+    },
+    {
+      href: "/broadcasts",
+      label: locale === "fi" ? "Tiedotteet tiimille" : "Team broadcasts",
+      icon: "broadcast",
+      show: canManageCompany(session.role),
+    },
+    {
+      href: "/settings",
+      label: locale === "fi" ? "Asetukset" : "Settings",
+      icon: "settings",
+      show: canManageCompany(session.role) || canAnalyze(session.role) || canEditCompany(session.role),
+    },
+  ];
+
+  const platformLinks: SideNavItem[] = [
+    { href: "/companies", label: t(locale, "nav.companies"), icon: "home" },
+    { href: "/notices", label: locale === "fi" ? "Alustatiedotteet" : "Platform notices", icon: "broadcast" },
+  ];
+
+  const links = inCompany ? companyLinks : platformLinks;
+
+  let noticeCount = 0;
+  if (inCompany && organization) {
+    try {
+      const result = await getPool().query(
+        `SELECT count(*)::int AS n FROM notices
+         WHERE audience IN ('companies', 'both')
+           AND (organization_id IS NULL OR organization_id = $1)`,
+        [organization.id]
+      );
+      noticeCount = result.rows[0]?.n || 0;
+    } catch {
+      noticeCount = 0;
+    }
+  }
 
   return (
     <div className="flex min-h-screen">
-      <aside className="aside-shell w-60 shrink-0 flex flex-col justify-between p-4">
+      <aside className="aside-shell flex w-60 shrink-0 flex-col justify-between p-4">
         <div>
-          <div className="mb-5">
-            <HarborMark onDark />
-          </div>
           {inCompany && organization ? (
             <>
               {session.role === "super_admin" && (
-                <p className="text-xs text-neutral-500 mb-2">GPT Lab</p>
-              )}
-              {organization.logo_url && (
-                <img src={organization.logo_url} alt="" className="h-10 w-10 rounded-md object-cover bg-white mb-2" />
-              )}
-              <Link href="/home" className="font-display text-2xl text-neutral-100 block leading-none">
-                {organization.name}
-              </Link>
-              <p className="text-xs text-neutral-500 mt-1 mb-4">
-                {people} · {t(locale, "nav.onHarbor")}
-              </p>
-              {session.role === "super_admin" && (
-                <form action={closeCompany} className="mb-4">
-                  <button type="submit" className="text-xs text-neutral-400 hover:text-amber-400">
+                <form action={closeCompany} className="mb-3">
+                  <button type="submit" className="inline-flex items-center gap-1 text-xs text-neutral-400 hover:text-amber-400">
+                    <NavIcon name="back" className="h-3.5 w-3.5" />
                     {t(locale, "nav.backToLab")}
                   </button>
                 </form>
               )}
+              <Link href="/home" className="mb-4 block">
+                {organization.logo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={organization.logo_url}
+                    alt={organization.name}
+                    className="mb-3 h-12 w-auto max-w-[9rem] object-contain object-left"
+                  />
+                ) : (
+                  <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-md bg-neutral-800 text-sm font-medium text-amber-400">
+                    {organization.name.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <span className="font-display block text-xl leading-tight text-neutral-100">{organization.name}</span>
+                <span className="mt-0.5 block text-xs text-neutral-500">{people}</span>
+              </Link>
               {organization.status !== "active" && (
-                <p className="text-xs text-neutral-500 mb-4">
-                  Status: {organization.status}. Records are unchanged.
-                </p>
+                <p className="mb-3 text-xs text-neutral-500">Status: {organization.status}</p>
               )}
             </>
           ) : (
-            <>
-              <p className="text-sm text-neutral-200 mt-1">GPT Lab</p>
-              <p className="text-xs text-neutral-500 mb-6">Platform owner</p>
-            </>
+            <div className="mb-6">
+              <p className="text-sm text-neutral-200">GPT Lab</p>
+              <p className="text-xs text-neutral-500">Platform</p>
+            </div>
           )}
-          <nav className="flex flex-col gap-0.5">
-            {links
-              .filter((link) => link.show !== false)
-              .map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="text-sm text-neutral-400 hover:text-amber-400 hover:bg-neutral-900 rounded-md px-2 py-1.5 transition"
-                >
-                  {link.label}
-                </Link>
-              ))}
-          </nav>
-        </div>
-        <div className="flex flex-col gap-3 pt-6">
-          <Preferences
-            locale={locale}
-            theme={theme}
-            languageLabel={t(locale, "common.language")}
-            themeLightLabel={t(locale, "common.themeToLight")}
-            themeDarkLabel={t(locale, "common.themeToDark")}
-          />
-          <form action={logoutAction}>
-            <button
-              type="submit"
-              className="text-sm text-neutral-500 hover:text-red-400 rounded-md px-2 py-1.5 transition"
-            >
-              {t(locale, "nav.logout")}
-            </button>
-          </form>
+          <SideNav links={links} />
         </div>
       </aside>
-      <main className="flex-1 min-w-0">{children}</main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <HeaderBar
+          locale={locale}
+          theme={theme}
+          languageLabel={t(locale, "common.language")}
+          themeLightLabel={t(locale, "common.themeToLight")}
+          themeDarkLabel={t(locale, "common.themeToDark")}
+          userName={session.name}
+          userEmail={session.email}
+          noticeCount={noticeCount}
+          logoutLabel={t(locale, "nav.logout")}
+          profileLabel={locale === "fi" ? "Profiili" : "Profile"}
+          noticesLabel={locale === "fi" ? "Ilmoitukset" : "Notifications"}
+        />
+        <main className="min-w-0 flex-1">{children}</main>
+      </div>
     </div>
   );
 }

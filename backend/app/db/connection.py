@@ -22,7 +22,15 @@ def get_db_connection():
     if not database_url:
         raise RuntimeError("DATABASE_URL must be set in your .env file.")
 
-    conn = psycopg2.connect(database_url, cursor_factory=psycopg2.extras.RealDictCursor)
+    # Supabase requires TLS. Append sslmode if the URI does not already set it.
+    connect_url = database_url
+    if (
+        ("supabase.co" in database_url or "supabase.com" in database_url)
+        and "sslmode=" not in database_url
+    ):
+        connect_url += ("&" if "?" in database_url else "?") + "sslmode=require"
+
+    conn = psycopg2.connect(connect_url, cursor_factory=psycopg2.extras.RealDictCursor)
     try:
         yield conn
         conn.commit()
@@ -346,10 +354,24 @@ def reset_agent_prompt(agent_name: str) -> None:
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM agent_prompts WHERE agent_name = %s", (agent_name,))
-DEFAULT_GREETING = (
-    "Hi! Tell me a bit about what you're looking for — a theme, a situation, "
-    "a team size, whatever comes to mind — and I'll help point you to the right fit."
-)
+DEFAULT_GREETINGS = {
+    "fi": [
+        "Hei! Kerro vähän, mitä etsit — teema, tilanne, tiimin koko, mikä vaan — niin autan löytämään sopivan valmentajan.",
+        "Terve! Olipa kyse tiimin haasteesta, tietystä tavoitteesta tai vasta raakileesta ideasta, "
+        "autan löytämään siihen oikean valmentajan.",
+        "Tervetuloa! Kerro tilanteestasi, isosta tai pienestä, niin ohjaan sinut valmentajan luo, "
+        "joka sopii teille aidosti.",
+    ],
+    "en": [
+        "Hi! Tell me a bit about what you're looking for — a theme, a situation, "
+        "a team size, whatever comes to mind — and I'll help point you to the right fit.",
+        "Hey there! Whatever's going on, a team challenge, a specific goal, or just a rough idea, "
+        "I'm here to help you find the right coach for it.",
+        "Welcome! Tell me a bit about your situation, big or small, and I'll help point you "
+        "toward a coach who genuinely fits.",
+    ],
+}
+DEFAULT_GREETING = DEFAULT_GREETINGS["fi"][0]
 
 
 def take_message_credit(organization_id: str | None) -> bool:
@@ -403,7 +425,10 @@ def fetch_public_company(slug: str | None) -> dict | None:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT name, slug, profile_label, profile_label_plural, logo_url
+                    SELECT name, slug, profile_label, profile_label_plural, logo_url,
+                           COALESCE(reply_language, 'auto') AS reply_language,
+                           COALESCE(widget_theme, 'dark') AS widget_theme,
+                           COALESCE(widget_accent, '#FFFFFF') AS widget_accent
                     FROM organizations
                     WHERE slug = %s AND COALESCE(status, 'active') = 'active'
                     """,
@@ -412,7 +437,51 @@ def fetch_public_company(slug: str | None) -> dict | None:
                 row = cur.fetchone()
                 return dict(row) if row else None
     except Exception:
-        return None
+        # Older DBs without appearance columns — fall back to the basic fields.
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT name, slug, profile_label, profile_label_plural, logo_url
+                        FROM organizations
+                        WHERE slug = %s AND COALESCE(status, 'active') = 'active'
+                        """,
+                        (slug,),
+                    )
+                    row = cur.fetchone()
+                    if not row:
+                        return None
+                    data = dict(row)
+                    data["reply_language"] = "auto"
+                    data["widget_theme"] = "dark"
+                    data["widget_accent"] = "#FFFFFF"
+                    return data
+        except Exception:
+            return None
+
+
+def fetch_company_chat_settings(organization_id: str | None) -> dict:
+    """Reply language + widget theme for one company."""
+    defaults = {"reply_language": "auto", "widget_theme": "dark", "widget_accent": "#FFFFFF"}
+    if not organization_id or organization_id == "00000000-0000-0000-0000-000000000000":
+        return defaults
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT COALESCE(reply_language, 'auto') AS reply_language,
+                           COALESCE(widget_theme, 'dark') AS widget_theme,
+                           COALESCE(widget_accent, '#FFFFFF') AS widget_accent
+                    FROM organizations WHERE id = %s
+                    """,
+                    (organization_id,),
+                )
+                row = cur.fetchone()
+                return dict(row) if row else defaults
+    except Exception:
+        return defaults
 
 
 def resolve_organization_id(slug: str | None) -> str | None:
@@ -432,13 +501,29 @@ def resolve_organization_id(slug: str | None) -> str | None:
         return None
 
 
-def fetch_random_greeting(organization_id: str | None = None) -> str:
+def _default_greeting_for_locale(locale: str | None) -> str:
+    import random
+
+    loc = (locale or "fi").lower()
+    if loc == "sv":
+        loc = "fi"
+    if loc not in DEFAULT_GREETINGS:
+        loc = "fi"
+    return random.choice(DEFAULT_GREETINGS[loc])
+
+
+def fetch_random_greeting(organization_id: str | None = None, locale: str | None = "fi") -> str:
     """
-    Picks one random active greeting for a fresh conversation. Falls back to
-    the original hardcoded default if the table is empty, has no active
-    rows, or the database is unreachable — the widget should never show
-    nothing, or an error, where a greeting is expected.
+    Picks one random active greeting for a fresh conversation.
+    Finnish reply locale uses localized defaults so English DB greetings do not leak.
+    Falls back to a hardcoded default if the table is empty or unreachable.
     """
+    loc = (locale or "fi").lower()
+    if loc == "sv":
+        loc = "fi"
+    if loc == "fi":
+        return _default_greeting_for_locale(loc)
+
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
@@ -470,4 +555,4 @@ def fetch_random_greeting(organization_id: str | None = None) -> str:
                     return row["greeting_text"]
     except Exception:
         pass
-    return DEFAULT_GREETING
+    return _default_greeting_for_locale(loc)

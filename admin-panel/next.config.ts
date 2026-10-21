@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Required for the slim production Docker image on Fly.io.
+  output: "standalone",
 };
 
 export default nextConfig;

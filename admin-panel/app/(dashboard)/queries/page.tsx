@@ -1,3 +1,4 @@
+import { Breadcrumbs } from "../../components/Breadcrumbs";
 import { getPool } from "@/lib/db";
 import { getWorkspace } from "@/lib/workspace";
 import QueryRow from "./QueryRow";
@@ -69,6 +70,7 @@ export default async function QueriesPage({
 
   return (
     <div className="max-w-6xl mx-auto p-8">
+      <Breadcrumbs items={[{ href: "/home", label: "Home" }, { label: "Inbox" }]} />
       <h1 className="font-display text-2xl font-semibold text-amber-400 uppercase tracking-wide mb-2">
         Coach Support Queries
       </h1>

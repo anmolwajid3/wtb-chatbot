@@ -1,5 +1,4 @@
--- Synthetic coach profiles for testing (per the brief's Section 6/9 requirement
--- to test grounding against a controlled, known-answer dataset)
+-- Synthetic coach profiles (Finnish content — primary language for WTB)
 
 INSERT INTO coaches (
     is_active, is_synthetic, coach_name, company_name, program_name, short_description,
@@ -8,41 +7,41 @@ INSERT INTO coaches (
     price_from, pricing_model, main_category, keywords, languages
 ) VALUES
 (
-    true, true, 'Synthetic Coach A', 'Testikumppani Oy', 'Team Motivation Sprint',
-    'A short, energizing program to re-motivate a flagging team.',
-    'A 4-week program combining group workshops and manager coaching to rebuild team energy and engagement after a period of low morale.',
-    'Mid-size teams (5-20 people), team leads and HR', ARRAY['low morale', 'team motivation', 'post-restructuring team rebuilding'],
-    ARRAY['motivation', 'team dynamics', 'engagement'], ARRAY['workshops', 'team coaching', 'pulse surveys'],
-    'Hybrid', 'Group', 5, 20, '4 weeks',
-    '€2,000 + VAT', 'Fixed package price', 'Team development',
-    ARRAY['motivation', 'team building', 'engagement'], ARRAY['Finnish', 'English']
+    true, true, 'Synteettinen valmentaja A', 'Testikumppani Oy', 'Tiimin motivaatiosprintti',
+    'Lyhyt, energisoiva ohjelma tiimin motivaation palautattamiseen.',
+    'Neljän viikon ohjelma, jossa yhdistyvät työpajat ja esihenkilövalmennus. Tavoitteena on palauttaa tiimin energia ja sitoutuminen matalan motivaation jakson jälkeen.',
+    'Keskisuuret tiimit (5–20 hlö), tiiminvetäjät ja HR', ARRAY['matala motivaatio', 'tiimin motivointi', 'uudelleenrakentaminen muutoksen jälkeen'],
+    ARRAY['motivaatio', 'tiimidynamiikka', 'sitoutuminen'], ARRAY['työpajat', 'tiimivalmennus', 'pulssikyselyt'],
+    'Hybrid', 'Ryhmä', 5, 20, '4 viikkoa',
+    '2 000 € + ALV', 'Kiinteä pakettihinta', 'Tiimikehitys',
+    ARRAY['motivaatio', 'tiimin rakentaminen', 'sitoutuminen'], ARRAY['suomi', 'englanti']
 ),
 (
-    true, true, 'Synthetic Coach B', 'Kriisiapu Consulting', 'Crisis Communication Bootcamp',
-    'Fast, practical crisis-communication training for leadership teams facing an active or recent crisis.',
-    'An intensive 2-day bootcamp covering crisis messaging, media handling, and internal communication during high-pressure situations.',
-    'Leadership teams, communications staff', ARRAY['crisis communication', 'PR emergency', 'reputational risk'],
-    ARRAY['crisis management', 'communication', 'media training'], ARRAY['simulations', 'role play', 'case study review'],
-    'In-person', 'Group', 2, 10, '2 days',
-    '€3,500 + VAT', 'Fixed package price', 'Communications',
-    ARRAY['crisis', 'communication', 'PR'], ARRAY['Finnish', 'English']
+    true, true, 'Synteettinen valmentaja B', 'Kriisiapu Consulting', 'Kriisiviestinnän bootcamp',
+    'Nopea, käytännönläheinen kriisiviestintäkoulutus johtoryhmille.',
+    'Kahden päivän intensiivikoulutus: kriisiviestit, media ja sisäinen viestintä paineen alla.',
+    'Johtoryhmät, viestintähenkilöstö', ARRAY['kriisiviestintä', 'PR-hätätilanne', 'maineen riski'],
+    ARRAY['kriisinhallinta', 'viestintä', 'mediavalmennus'], ARRAY['simulaatiot', 'rooliharjoitukset', 'case-analyysi'],
+    'Lähi', 'Ryhmä', 2, 10, '2 päivää',
+    '3 500 € + ALV', 'Kiinteä pakettihinta', 'Viestintä',
+    ARRAY['kriisi', 'viestintä', 'PR'], ARRAY['suomi', 'englanti']
 ),
 (
-    true, true, 'Synthetic Coach C', 'Kasvupolku Oy', 'Executive Growth Sparring',
-    'One-on-one strategic sparring for CEOs and founders navigating a growth transition.',
-    'Ongoing monthly one-on-one sessions for CEOs facing a scaling challenge, market shift, or leadership transition, combining strategic sparring with accountability check-ins.',
-    'CEOs and founders of SMEs (€1-20M revenue)', ARRAY['scaling challenges', 'leadership transition', 'founder burnout'],
-    ARRAY['strategy', 'executive coaching', 'growth leadership'], ARRAY['1:1 sparring', 'goal tracking'],
-    'Remote', 'Individual', 1, 1, 'Ongoing, monthly',
-    '€180/h + VAT', 'Hourly billing', 'Business and leadership',
-    ARRAY['strategy', 'executive coaching', 'growth'], ARRAY['Finnish', 'English']
+    true, true, 'Synteettinen valmentaja C', 'Kasvupolku Oy', 'Johtajan kasvuparring',
+    'Henkilökohtainen strateginen sparraus toimitusjohtajille ja perustajille kasvuvaiheessa.',
+    'Kuukausittaiset 1:1-tapaamiset kasvun, markkinamuutoksen tai johtajuussiirtymän tueksi — strategista sparrausta ja vastuullistamista.',
+    'PK-yritysten toimitusjohtajat ja perustajat (liikevaihto 1–20 M€)', ARRAY['kasvun haasteet', 'johtajuussiirtymä', 'perustajan uupumus'],
+    ARRAY['strategia', 'johtajavalmennus', 'kasvujohtaminen'], ARRAY['1:1-sparraus', 'tavoitteiden seuranta'],
+    'Etä', 'Yksilö', 1, 1, 'Jatkuva, kuukausittain',
+    '180 €/h + ALV', 'Tuntiveloitus', 'Liiketoiminta ja johtaminen',
+    ARRAY['strategia', 'johtajavalmennus', 'kasvu'], ARRAY['suomi', 'englanti']
 ),
 (
-    false, true, 'Synthetic Coach D (inactive — for testing deactivation)', 'Testikumppani Oy', 'Legacy Program (Deactivated)',
-    'This profile is intentionally deactivated and should never appear in bot recommendations.',
-    'Used to verify that inactive coaches are correctly excluded from matching.',
-    'N/A', ARRAY['N/A'], ARRAY['N/A'], ARRAY['N/A'],
-    'Remote', 'Individual', 1, 1, 'N/A',
-    '€999 + VAT', 'N/A', 'Testing',
-    ARRAY['deactivated', 'test'], ARRAY['Finnish']
+    false, true, 'Synteettinen valmentaja D (ei aktiivinen)', 'Testikumppani Oy', 'Vanha ohjelma (poistettu käytöstä)',
+    'Tämä profiili on tarkoituksella pois käytöstä eikä saa näkyä suosituksissa.',
+    'Käytetään varmistamaan, että epäaktiiviset valmentajat jäävät pois osumista.',
+    'Ei käytössä', ARRAY['ei käytössä'], ARRAY['ei käytössä'], ARRAY['ei käytössä'],
+    'Etä', 'Yksilö', 1, 1, 'Ei käytössä',
+    '999 € + ALV', 'Ei käytössä', 'Testaus',
+    ARRAY['pois käytöstä', 'testi'], ARRAY['suomi']
 );
