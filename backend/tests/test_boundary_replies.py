@@ -17,6 +17,21 @@ def test_timing_follow_up_has_no_stock_picture_line():
     assert reply is not None
     assert "when would you want this to start" in reply.lower()
     assert "real picture" not in reply.lower()
+    # Do not parrot the visitor's situation back at them.
+    assert "team motivation" not in reply.lower()
+    assert "demotivated" not in reply.lower()
+
+
+def test_finnish_timing_follow_up_does_not_echo_theme():
+    slots = {
+        "theme": "Tiimini on alkanut tuntea itsensä motivoitumattomaksi, eikä",
+        "need_description": "Tiimini on alkanut tuntea itsensä motivoitumattomaksi",
+    }
+    reply = follow_up_reply(slots, slots["need_description"], "fi")
+    assert reply is not None
+    assert "Milloin tämän olisi hyvä alkaa" in reply
+    assert "Tiimini" not in reply
+    assert "motivoitumattomaksi" not in reply
 
 
 def test_employment_law_counts_as_legal_advice_request():

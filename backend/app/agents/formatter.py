@@ -82,7 +82,7 @@ _COPY = {
         "price_quote": "En voi antaa hintoja tässä — tiimi liittää ne mukaan, kun he ottavat yhteyttä.",
         "ask_situation": "Kerro omin sanoin, mitä on meneillään?",
         "ask_timing": "Milloin tämän olisi hyvä alkaa?",
-        "got_timing": "Selvä — {theme}. Milloin tämän olisi hyvä alkaa?",
+        "got_timing": "Selvä. Milloin tämän olisi hyvä alkaa?",
         "one_more": "Ennen kuin ehdotan ketään, onko vielä yksi yksityiskohta siitä, miten tämä näkyy tiimissä?",
     },
     "en": {
@@ -95,7 +95,7 @@ _COPY = {
         "price_quote": "I can't give prices here — the team includes that in the quote when they follow up.",
         "ask_situation": "What's going on, in your own words?",
         "ask_timing": "When would you want this to start?",
-        "got_timing": "Got it — {theme}. When would you want this to start?",
+        "got_timing": "Got it. When would you want this to start?",
         "one_more": "Before I suggest anyone, is there one more detail about how this is showing up for the team?",
     },
 }
@@ -142,9 +142,8 @@ def follow_up_reply(slots: dict, latest_user: str, locale: str = "en") -> str | 
     if not has_situation:
         return _t("ask_situation", locale)
     if not slots.get("timing"):
-        if slots.get("theme"):
-            return _t("got_timing", locale, theme=str(slots["theme"])[:60].rstrip("."))
-        return _t("ask_timing", locale)
+        # Acknowledge without parroting the visitor's full message back.
+        return _t("got_timing", locale) if slots.get("theme") else _t("ask_timing", locale)
     return None
 
 

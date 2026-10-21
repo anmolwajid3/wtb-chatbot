@@ -19,6 +19,9 @@
     --amber-tint: rgba(255, 255, 255, 0.12);
     --cream: #F3EFE6;
     --cream-soft: #B8B2A6;
+    --on-accent: #241A0A;
+    --user-bubble: #FFFFFF;
+    --user-bubble-text: #241A0A;
     --radius-lg: 18px;
     --radius-md: 12px;
     --shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.55);
@@ -33,11 +36,14 @@
     --card: #FFFFFF;
     --card-hover: #D5DDD0;
     --border: #B7C3B2;
-    --amber: #0E1C12;
-    --amber-dark: #16301C;
-    --amber-tint: rgba(154, 98, 20, 0.12);
+    --amber: #16301C;
+    --amber-dark: #0E1C12;
+    --amber-tint: rgba(22, 48, 28, 0.12);
     --cream: #1C1915;
     --cream-soft: #5E574E;
+    --on-accent: #F3EFE6;
+    --user-bubble: #16301C;
+    --user-bubble-text: #F3EFE6;
     --shadow: 0 18px 40px -16px rgba(60, 40, 10, 0.2);
   }
 
@@ -110,7 +116,7 @@
   }
   .demo-tools button[aria-pressed="true"] {
     background: var(--amber);
-    color: #241A0A;
+    color: var(--on-accent);
     border-color: var(--amber);
   }
   .demo-note {
@@ -287,8 +293,8 @@
     white-space: pre-wrap;
   }
   .msg.user .bubble {
-    background: var(--amber);
-    color: #241A0A;
+    background: var(--user-bubble);
+    color: var(--user-bubble-text);
     font-weight: 500;
     border-bottom-right-radius: 4px;
   }
@@ -518,7 +524,7 @@
   .coach-detail-select-btn {
     width: 100%;
     background: var(--amber);
-    color: #241A0A;
+    color: var(--on-accent);
     border: none;
     border-radius: var(--radius-md);
     padding: 12px;
@@ -562,7 +568,7 @@
     border-radius: 50%;
     background: var(--amber);
     border: none;
-    color: #241A0A;
+    color: var(--on-accent);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -801,9 +807,27 @@
       document.body.classList.toggle('light', theme === 'light');
     }
     if (data.widget_accent && /^#[0-9A-Fa-f]{6}$/.test(data.widget_accent)) {
-      document.documentElement.style.setProperty('--amber', data.widget_accent);
-      document.documentElement.style.setProperty('--amber-dark', data.widget_accent);
+      applyAccent(data.widget_accent);
     }
+  }
+
+  function accentLuminance(hex) {
+    const raw = hex.replace('#', '');
+    const r = parseInt(raw.slice(0, 2), 16) / 255;
+    const g = parseInt(raw.slice(2, 4), 16) / 255;
+    const b = parseInt(raw.slice(4, 6), 16) / 255;
+    const lin = (c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+    return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  }
+
+  function applyAccent(hex) {
+    const root = document.documentElement;
+    const onAccent = accentLuminance(hex) > 0.45 ? '#241A0A' : '#F3EFE6';
+    root.style.setProperty('--amber', hex);
+    root.style.setProperty('--amber-dark', hex);
+    root.style.setProperty('--on-accent', onAccent);
+    root.style.setProperty('--user-bubble', hex);
+    root.style.setProperty('--user-bubble-text', onAccent);
   }
 
   async function loadCompanyBrand() {

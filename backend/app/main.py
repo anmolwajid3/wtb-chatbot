@@ -154,7 +154,7 @@ def chat(request: ChatRequest) -> ChatResponse:
 @app.get("/health")
 def health():
     # build marker so you can confirm a redeploy actually landed
-    return {"status": "ok", "build": "fi-post-select-v1"}
+    return {"status": "ok", "build": "fi-light-no-echo-v1"}
 
 @app.get("/company")
 def company(organization_slug: str | None = None):
