@@ -159,6 +159,7 @@ export async function resetMessageCredits(formData: FormData) {
   const workspace = await getWorkspace();
   if (!workspace || workspace.session.role !== "super_admin") redirect("/home");
   const id = String(formData.get("id") || "");
+  const returnTo = String(formData.get("return_to") || "/companies");
   if (!id) redirect("/companies");
   const pool = getPool();
   await pool.query(
@@ -167,5 +168,5 @@ export async function resetMessageCredits(formData: FormData) {
      WHERE id = $1`,
     [id]
   );
-  redirect("/companies");
+  redirect(returnTo.startsWith("/") ? returnTo : "/companies");
 }

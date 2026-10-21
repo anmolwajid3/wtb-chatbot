@@ -130,8 +130,17 @@ export default async function CompaniesPage({
                       </form>
                       <form action={resetMessageCredits}>
                         <input type="hidden" name="id" value={company.id} />
-                        <button type="submit" className="text-sm text-neutral-400 hover:text-amber-400">
-                          Reset messages
+                        <input type="hidden" name="return_to" value="/companies" />
+                        <button
+                          type="submit"
+                          className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-sm font-medium text-amber-400 hover:bg-amber-500/20"
+                          title={
+                            locale === "fi"
+                              ? "Nollaa tämän kuun viestikiintiö"
+                              : "Reset this month's message allowance"
+                          }
+                        >
+                          {locale === "fi" ? "Nollaa viestit" : "Reset messages"}
                         </button>
                       </form>
                       {company.status !== "archived" && (
