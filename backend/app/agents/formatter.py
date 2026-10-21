@@ -10,6 +10,7 @@ anything because it is never given anything to invent from.
 """
 import re
 from app.agents.guardrail_check import visitor_advice_rule
+from app.agents.intent_router import _price_question_text
 from app.llm import get_llm
 from app.db.connection import fetch_coaches_by_ids, fetch_match_settings, get_agent_prompt
 
@@ -75,7 +76,7 @@ _COPY = {
         "advice": "En voi antaa lääketieteellistä tai juridista neuvontaa.",
         "advice_ask_team": "Jos etsit valmentajaa, kerro mitä tiimissä tapahtuu?",
         "advice_ask_timing": "Milloin tämän olisi hyvä alkaa?",
-        "offtopic": "Tämä on asian ulkopuolella tässä chatissa.",
+        "offtopic": "Tämä chat on valmentajan löytämiseen — en voi auttaa siinä asiassa täällä.",
         "price_need_fit": "En voi puhua hinnasta ennen kuin tiedän tarpeen. Mitä tiimissä on meneillään?",
         "price_ask_timing": "En voi antaa hintoja tässä — tiimi lähettää tarjouksen, kun sopivuus on selvillä. Milloin tämän olisi hyvä alkaa?",
         "price_quote": "En voi antaa hintoja tässä — tiimi liittää ne mukaan, kun he ottavat yhteyttä.",
@@ -113,7 +114,7 @@ def _t(key: str, locale: str, **kwargs) -> str:
 
 
 def _price_question(text: str) -> bool:
-    return bool(re.search(r"\b(price|pricing|cost|how much|fee|fees|hinta|kustannus|pris)\b", text, re.I))
+    return _price_question_text(text)
 
 
 def boundary_reply(slots: dict, lead_key: str, locale: str = "en") -> str:

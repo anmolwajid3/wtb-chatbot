@@ -67,14 +67,40 @@ def _clean_message(text: str) -> str:
     return text.strip().strip("*_\"'").strip()
 
 
+_PRICE_ASK_RE = re.compile(
+    r"(?:"
+    r"\b(?:price|pricing|cost|how\s+much|fee|fees)\b"
+    r"|\b(?:hinta\w*|hinnoittelu|kustannus\w*)\b"
+    r"|\bmaksa(?:a|vat|isi|isit|tte|n|mme)?\b"
+    r"|\bpaljonko\b"
+    r"|\b(?:pris|kostar|kostnad\w*)\b"
+    r")",
+    re.I,
+)
+
+# Personal grief / loss asides — never a coaching "theme" via the local shortcut.
+_PERSONAL_OFF_TOPIC_RE = re.compile(
+    r"(?:"
+    r"\b(?:my|our)\s+(?:cat|dog|pet|mom|dad|mother|father|grandma|grandpa|"
+    r"wife|husband|partner|child|kid|baby)\s+(?:died|passed)\b"
+    r"|\b(?:passed\s+away|died\s+unexpectedly)\b"
+    r"|(?:kissani|koirani|lemmikkini|äitini|isäni|puolisoni|lapseni)"
+    r".{0,40}\b(?:kuoli|kuollut)\b"
+    r"|\b(?:kuoli|kuollut)\b.{0,40}"
+    r"(?:kissani|koirani|lemmikkini|äitini|isäni|puolisoni|lapseni|"
+    r"kissa|koira|lemmikki)\b"
+    r")",
+    re.I,
+)
+
+
 def _price_question_text(text: str) -> bool:
-    return bool(
-        re.search(
-            r"\b(price|pricing|cost|how much|fee|fees|hinta|hinnoittelu|kustannus|maksaa|pris|kostar)\b",
-            text,
-            re.I,
-        )
-    )
+    return bool(_PRICE_ASK_RE.search(text or ""))
+
+
+def _is_obvious_off_topic(text: str) -> bool:
+    """Cheap screen for personal asides that must not become a coaching theme."""
+    return bool(_PERSONAL_OFF_TOPIC_RE.search(text or ""))
 
 
 def _timing_phrase(text: str) -> str | None:
@@ -164,15 +190,13 @@ def _is_obvious_spam(text: str) -> bool:
 
 def _looks_like_a_situation(text: str) -> bool:
     """A real description of a need, not a short price question or promo spam."""
-    if _is_obvious_spam(text):
+    if _is_obvious_spam(text) or _is_obvious_off_topic(text):
         return False
     # Include Finnish/Swedish letters (ä ö å) so word counts are real.
     words = re.findall(r"[A-Za-zÄÖÅäöå']+", text)
     if len(words) < 6:
         return False
-    if re.search(
-        r"\b(price|pricing|cost|how much|fee|fees|hinta|maksaa|pris)\b", text, re.I
-    ) and len(words) < 14:
+    if _price_question_text(text) and len(words) < 14:
         return False
     return True
 
@@ -217,6 +241,14 @@ def run_intent_router(state: dict) -> dict:
     # Promo spam must never become theme/need via the local shortcut.
     if _is_obvious_spam(latest_message):
         state["outcome"] = "spam"
+        state["gathered_slots"] = slots
+        state["ready_to_match"] = False
+        return state
+
+    # Personal grief / loss asides must not become theme via the local shortcut
+    # (that path would skip the LLM and never set is_off_topic).
+    if _is_obvious_off_topic(latest_message):
+        state["off_topic_this_turn"] = True
         state["gathered_slots"] = slots
         state["ready_to_match"] = False
         return state

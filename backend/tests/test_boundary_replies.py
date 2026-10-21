@@ -109,3 +109,58 @@ def test_finnish_timing_unlocks_follow_up():
     assert follow_up_reply(slots, "Haluaisimme aloittaa noin kuukauden päästä.", "fi") is None
 
 
+def test_finnish_cat_death_is_off_topic_not_a_situation():
+    from app.agents.intent_router import (
+        _is_obvious_off_topic,
+        _looks_like_a_situation,
+        run_intent_router,
+    )
+
+    text = "Kissani on kuollut, eikä se tunnu hyvältä."
+    assert _is_obvious_off_topic(text) is True
+    assert _looks_like_a_situation(text) is False
+
+    state = {
+        "messages": [{"role": "user", "content": text}],
+        "gathered_slots": {},
+        "organization_id": None,
+    }
+    out = run_intent_router(state)
+    assert out["off_topic_this_turn"] is True
+    assert not out["gathered_slots"].get("theme")
+    assert not out["gathered_slots"].get("need_description")
+
+
+def test_finnish_maksavat_paljonko_is_price_question():
+    from app.agents.intent_router import _price_question_text
+
+    assert _price_question_text("Paljonko valmennuspalvelunne maksavat minulle?")
+    assert _price_question_text("Mitä tämä maksaa?")
+    reply = follow_up_reply({}, "Paljonko valmennuspalvelunne maksavat minulle?", "fi")
+    assert reply is not None
+    assert "hinnasta" in reply.lower() or "tarjouksen" in reply.lower()
+    assert "kuollut" not in reply.lower()
+    # With a prior (wrong) theme but no timing, still refuse price — don't re-ask only timing.
+    stuck = {"theme": "Kissani on kuollut", "need_description": "Kissani on kuollut"}
+    priced = follow_up_reply(stuck, "Paljonko valmennuspalvelunne maksavat minulle?", "fi")
+    assert "hintoja" in priced.lower() or "tarjouksen" in priced.lower()
+
+
+def test_formatter_offtopic_after_cat_death():
+    from app.agents.formatter import run_formatter
+
+    state = {
+        "messages": [{"role": "user", "content": "Kissani on kuollut, eikä se tunnu hyvältä."}],
+        "gathered_slots": {},
+        "ready_to_match": False,
+        "reply_locale": "fi",
+        "off_topic_this_turn": True,
+        "detected_mood": "negative",
+        "tone_guidance": {"base_tone": "Warm.", "example_phrases": []},
+    }
+    out = run_formatter(state)
+    reply = out["final_reply"].lower()
+    assert "valmentajan" in reply or "ulkopuolella" in reply or "tiimissä" in reply
+    assert "milloin tämän olisi hyvä alkaa" not in reply
+
+
