@@ -38,6 +38,9 @@ export default async function SettingsPage() {
           light: "Vaalea",
           accent: "Korostusväri",
           accentHint: "Käytetään chatin painikkeissa. Valitse brändisi väri — ei tarvitse olla oletus.",
+          inviteFrom: "Kutsujen lähettäjä (From)",
+          inviteFromHint:
+            "Sähköposti, josta kirjautumiskutsut lähtevät (esim. info@wtb.fi). Domainin pitää olla vahvistettu Resendissä.",
           save: "Tallenna ulkoasu",
           open: "Avaa chatbot",
           model: "Mallin valinta",
@@ -61,6 +64,9 @@ export default async function SettingsPage() {
             light: "Light",
             accent: "Accent color",
             accentHint: "Used for chat buttons and highlights. Pick your brand color — it doesn’t have to stay the default.",
+            inviteFrom: "Invite From email",
+            inviteFromHint:
+              "Address used as the sender for login invites (e.g. info@wtb.fi). The domain must be verified in Resend.",
             save: "Save appearance",
             open: "Open chatbot",
             model: "Model selection",
@@ -128,6 +134,17 @@ export default async function SettingsPage() {
                 className="mt-1 h-10 w-24 rounded-md border border-neutral-700 bg-black p-1"
               />
               <span className="mt-1 block text-xs text-neutral-500">{copy.accentHint}</span>
+            </label>
+            <label className="block text-sm text-neutral-400">
+              {copy.inviteFrom}
+              <input
+                type="text"
+                name="invite_from_email"
+                defaultValue={organization.invite_from_email || ""}
+                placeholder="info@your-company.com"
+                className={inputClass}
+              />
+              <span className="mt-1 block text-xs text-neutral-500">{copy.inviteFromHint}</span>
             </label>
             <div>
               <button type="submit" className="rounded-md bg-amber-500 px-4 py-2 font-medium text-black">

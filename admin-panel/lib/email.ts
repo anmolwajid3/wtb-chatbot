@@ -1,23 +1,42 @@
 /**
  * Transactional email via Resend (https://resend.com).
- * Set RESEND_API_KEY and EMAIL_FROM on Fly / .env.local.
- * Without keys, sendAccountInvite returns { ok: false } so callers can still create the account.
+ * Requires RESEND_API_KEY on Fly / .env.local.
+ * The From address comes from the company setting (invite_from_email), not a hardcoded env value.
  */
 
 export type SendResult = { ok: true } | { ok: false; error: string };
 
+function normalizeFrom(from: string, companyName: string): string {
+  const trimmed = from.trim();
+  if (!trimmed) return "";
+  // Already "Name <email@domain>"
+  if (trimmed.includes("<") && trimmed.includes(">")) return trimmed;
+  // Bare email → prefix with company name
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    const safeName = (companyName || "Opas").replace(/[<>"]/g, "").trim() || "Opas";
+    return `${safeName} <${trimmed}>`;
+  }
+  return trimmed;
+}
+
 export async function sendEmail(options: {
   to: string;
+  from: string;
   subject: string;
   text: string;
   html?: string;
 }): Promise<SendResult> {
   const apiKey = process.env.RESEND_API_KEY?.trim();
-  const from = process.env.EMAIL_FROM?.trim();
-  if (!apiKey || !from) {
+  if (!apiKey) {
     return {
       ok: false,
-      error: "Email is not configured (set RESEND_API_KEY and EMAIL_FROM).",
+      error: "Email is not configured (set RESEND_API_KEY on the server).",
+    };
+  }
+  if (!options.from?.trim()) {
+    return {
+      ok: false,
+      error: "Set the company invite From email in Settings first.",
     };
   }
 
@@ -29,7 +48,7 @@ export async function sendEmail(options: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from,
+        from: options.from,
         to: [options.to],
         subject: options.subject,
         text: options.text,
@@ -58,7 +77,12 @@ export async function sendStaffInvite(options: {
   name: string;
   password: string;
   companyName: string;
+  fromEmail: string | null | undefined;
 }): Promise<SendResult> {
+  const from = normalizeFrom(options.fromEmail || "", options.companyName);
+  if (!from) {
+    return { ok: false, error: "Set the company invite From email in Settings first." };
+  }
   const loginUrl = `${appBaseUrl()}/login`;
   const subject = `${options.companyName} — kirjautumistiedot / sign-in details`;
   const text = [
@@ -86,7 +110,7 @@ export async function sendStaffInvite(options: {
     "Change your password after signing in on the Profile page.",
   ].join("\n");
 
-  return sendEmail({ to: options.to, subject, text });
+  return sendEmail({ to: options.to, from, subject, text });
 }
 
 export async function sendCoachInvite(options: {
@@ -95,7 +119,12 @@ export async function sendCoachInvite(options: {
   username: string;
   password: string;
   companyName: string;
+  fromEmail: string | null | undefined;
 }): Promise<SendResult> {
+  const from = normalizeFrom(options.fromEmail || "", options.companyName);
+  if (!from) {
+    return { ok: false, error: "Set the company invite From email in Settings first." };
+  }
   const loginUrl = `${appBaseUrl()}/login`;
   const subject = `${options.companyName} — valmentajaportaalin tunnukset / coach portal login`;
   const text = [
@@ -125,5 +154,5 @@ export async function sendCoachInvite(options: {
     "You will be asked to set your own password on first login.",
   ].join("\n");
 
-  return sendEmail({ to: options.to, subject, text });
+  return sendEmail({ to: options.to, from, subject, text });
 }

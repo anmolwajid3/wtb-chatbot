@@ -251,7 +251,7 @@ export async function setCoachAccountCredentials(
   let emailError: string | undefined;
   if (sendEmailInvite) {
     const coach = await pool.query(
-      `SELECT c.coach_name, c.email, o.name AS company_name
+      `SELECT c.coach_name, c.email, o.name AS company_name, o.invite_from_email
        FROM coaches c
        LEFT JOIN organizations o ON o.id = c.organization_id
        WHERE c.id = $1`,
@@ -269,6 +269,7 @@ export async function setCoachAccountCredentials(
         username: username.trim(),
         password,
         companyName: row.company_name || "Opas",
+        fromEmail: row.invite_from_email,
       });
       emailed = result.ok;
       if (!result.ok) emailError = result.error;

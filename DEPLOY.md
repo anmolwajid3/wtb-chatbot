@@ -179,15 +179,20 @@ fly secrets set \
   BACKEND_URL="https://opas-api.fly.dev"
 ```
 
-Optional — email login invites when an admin creates a staff user or coach portal account ([Resend](https://resend.com)):
+Optional — email login invites ([Resend](https://resend.com)):
+
+1. Create a free account at https://resend.com → **API Keys** → **Create API Key** → copy the `re_…` value.
+2. In Resend → **Domains**, add and verify your company domain (e.g. `wtb.fi`).
+3. Set only the API key on Fly (the From address is configured in admin **Settings** per company):
 
 ```bash
 fly secrets set \
-  RESEND_API_KEY="re_..." \
-  EMAIL_FROM="WTB <onboarding@your-verified-domain.com>" \
+  RESEND_API_KEY="re_xxxxxxxx" \
   APP_BASE_URL="https://opas-admin.fly.dev" \
   -a opas-admin
 ```
+
+4. In the admin panel → **Settings** → set **Invite From email** (e.g. `info@wtb.fi`) → Save.
 
 Required for company logos and coach image uploads (Supabase Storage):
 
