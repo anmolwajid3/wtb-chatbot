@@ -4,7 +4,11 @@ Unit tests for instruction-following / anti-drift grounding.
 These do not call OpenRouter or Postgres — they pin the structural
 checks that keep replies on the rails.
 """
-from app.agents.formatter import follow_up_reply, boundary_reply
+from app.agents.formatter import (
+    OPENER_NEED_SITUATION,
+    boundary_reply,
+    follow_up_reply,
+)
 from app.agents.grounding import (
     compose_match_reply,
     compose_no_match_reply,
@@ -90,7 +94,16 @@ def test_follow_up_asks_one_thing_at_a_time():
     ) is None
 
 
+def test_warmup_opener_is_natural_not_own_words():
+    """Pins the 'hello' → opener path; never regress to 'in your own words'."""
+    reply = follow_up_reply({}, "hello")
+    assert reply == OPENER_NEED_SITUATION
+    assert "own words" not in reply.lower()
+    assert "in your own words" not in reply.lower()
+
+
 def test_boundary_reply_returns_to_coaching():
     reply = boundary_reply({}, "I can't give medical or legal advice.")
     assert "medical" in reply.lower() or "legal" in reply.lower()
-    assert "team" in reply.lower() or "coach" in reply.lower()
+    assert "coach" in reply.lower() or "situation" in reply.lower()
+    assert "own words" not in reply.lower()

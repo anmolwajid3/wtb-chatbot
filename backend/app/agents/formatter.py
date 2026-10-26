@@ -75,11 +75,24 @@ def _price_question(text: str) -> bool:
     return bool(re.search(r"\b(price|pricing|cost|how much|fee|fees)\b", text, re.I))
 
 
+# Warm-up openers — kept as constants so tests can pin the product copy.
+OPENER_NEED_SITUATION = (
+    "Tell me a bit about the situation you'd like help with."
+)
+OPENER_AFTER_PRICE = (
+    "I can't talk about price until I know the fit. "
+    "What situation are you hoping coaching can help with?"
+)
+OPENER_AFTER_BOUNDARY = (
+    "If you want help finding a coach, tell me a bit about the situation."
+)
+
+
 def boundary_reply(slots: dict, lead: str) -> str:
     """Refuse or redirect, then ask only the next coaching question still missing."""
     has_situation = bool(slots.get("theme") or slots.get("need_description"))
     if not has_situation:
-        return f"{lead} If you want help finding a coach, what's going on with the team?"
+        return f"{lead} {OPENER_AFTER_BOUNDARY}"
     if not slots.get("timing"):
         return f"{lead} When would you want this to start?"
     return lead
@@ -90,8 +103,8 @@ def follow_up_reply(slots: dict, latest_user: str) -> str | None:
     has_situation = bool(slots.get("theme") or slots.get("need_description"))
     if not has_situation:
         if _price_question(latest_user):
-            return "I can't talk about price until I know the fit. What's going on with the team?"
-        return "What's going on, in your own words?"
+            return OPENER_AFTER_PRICE
+        return OPENER_NEED_SITUATION
     if not slots.get("timing"):
         return "That gives me a real picture. When would you want this to start?"
     return None
