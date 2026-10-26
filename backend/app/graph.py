@@ -244,6 +244,8 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
     state["outcome"] = "matched"
     state["coach_selected"] = True
     state["post_selection_turns"] = 0
+    state["awaiting_optional_details"] = False
+    state["handoff_complete"] = False
 
     reply = (
         f"Great choice, {coach_name}'s {program_name} it is.{_known_fit_sentence(state)} "
@@ -277,9 +279,29 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
 
 _PRICE_ASK = re.compile(r"\b(price|pricing|cost|how much|fee|fees|charg\w*)\b", re.I)
 _EMAIL = re.compile(r"[\w.+-]+@[\w.-]+\.\w+")
-_FORMAT = re.compile(r"\b(remote|distributed|virtual|online|hybrid|in[- ]person)\b", re.I)
+_FORMAT = re.compile(
+    r"\b("
+    r"remote|distributed|virtual|online|hybrid|"
+    r"in[- ]person|face[- ]to[- ]face|onsite|on[- ]site|"
+    r"lähi|close(?:\s+training)?"
+    r")\b",
+    re.I,
+)
 _SCHEDULE = re.compile(
-    r"\b(monday|tuesday|wednesday|thursday|friday|schedule|morning|evening|calendar)\b",
+    r"\b("
+    r"monday|tuesday|wednesday|thursday|friday|"
+    r"weekday|weekdays|weekend|weekends|"
+    r"schedule|morning|evening|calendar"
+    r")\b",
+    re.I,
+)
+_ACK = re.compile(
+    r"^(okay|ok|okey|thanks|thank you|thx|great|perfect|sounds good|"
+    r"got it|cheers|bye|goodbye|cool|nice|kiitos)[.!]?$",
+    re.I,
+)
+_SKIP_OPTIONAL = re.compile(
+    r"^(skip|no|nothing|nope|n/a|none|okay|ok|okey)[.!]?$",
     re.I,
 )
 
@@ -327,19 +349,36 @@ def _selected_coach(state: dict) -> dict:
     return rows[0] if rows else {}
 
 
+def _ask_optional_details(state: dict, contact: str, program: str, known: str) -> tuple[str, str]:
+    missing = _missing_optional_details(state)
+    if not missing:
+        return (
+            f"Thank you. I'll use {contact} for the follow-up on {program}.{known}"
+        ), "close"
+    if len(missing) == 1:
+        ask = missing[0]
+    else:
+        ask = ", ".join(missing[:-1]) + ", and " + missing[-1]
+    return (
+        f"Thank you. I'll use {contact} for the follow-up on {program}.{known} "
+        f"If you have it, {ask}? Skipping that is fine."
+    ), "ask"
+
+
 def _selection_reply(state: dict, message: str) -> tuple[str, str]:
     """Answer the message in front of us. Returns the reply and stay, ask, or close."""
     coach = _selected_coach(state)
     name = coach.get("coach_name") or "that coach"
     program = coach.get("program_name") or "the program"
     known = _known_fit_sentence(state)
+    slots = dict(state.get("gathered_slots") or {})
+    existing_contact = slots.get("contact")
 
     if _PRICE_ASK.search(message):
-        already = (state.get("gathered_slots") or {}).get("contact")
-        if already:
+        if existing_contact:
             return (
                 f"I can't tell you what {name} charges for {program}. "
-                f"The team will include the quote when they write to {already}.{known}"
+                f"The team will include the quote when they write to {existing_contact}.{known}"
             ), "stay"
         return (
             f"I can't tell you what {name} charges for {program}. "
@@ -348,7 +387,6 @@ def _selection_reply(state: dict, message: str) -> tuple[str, str]:
 
     email = _EMAIL.search(message)
     if email:
-        slots = dict(state.get("gathered_slots") or {})
         slots["contact"] = email.group(0)
         state["gathered_slots"] = slots
         missing = _missing_optional_details(state)
@@ -358,14 +396,22 @@ def _selection_reply(state: dict, message: str) -> tuple[str, str]:
                 f"Thank you. I'll send {name}'s {program} to the team with {facts}. "
                 f"They'll follow up at {email.group(0)}."
             ), "close"
-        if len(missing) == 1:
-            ask = missing[0]
-        else:
-            ask = ", ".join(missing[:-1]) + ", and " + missing[-1]
+        return _ask_optional_details(state, email.group(0), program, known)
+
+    # Contact already captured — never re-ask for name/email.
+    if existing_contact:
+        if not state.get("awaiting_optional_details"):
+            missing = _missing_optional_details(state)
+            if missing:
+                return _ask_optional_details(state, existing_contact, program, known)
+            facts = ", ".join(_known_fit_facts(state)) or "what you described"
+            return (
+                f"Thanks — I already have {existing_contact}. "
+                f"I'll send {name}'s {program} to the team with {facts}."
+            ), "close"
         return (
-            f"Thank you. I'll use {email.group(0)} for the follow-up on {program}.{known} "
-            f"If you have it, {ask}? Skipping that is fine."
-        ), "ask"
+            f"Thanks — I already have {existing_contact} for follow-up on {name}'s {program}.{known}"
+        ), "close"
 
     lowered = message.lower()
     if coach.get("duration") and re.search(r"\b(how long|duration|weeks|length)\b", lowered):
@@ -396,7 +442,7 @@ def _closing_reply(state: dict, message: str) -> str:
             f"I can't tell you what {name} charges for {program}. "
             f"I'll send what I have to the team and they'll include the quote when they write."
         )
-    if re.fullmatch(r"(skip|no|nothing|nope|n/a|none)[.!]?", note, re.I):
+    if _SKIP_OPTIONAL.fullmatch(note):
         facts = ", ".join(_known_fit_facts(state))
         extra = f" I already have {facts}." if facts else ""
         return (
@@ -405,6 +451,33 @@ def _closing_reply(state: dict, message: str) -> str:
     return (
         f"I'll pass that along with {name}'s {program}: {note}. "
         f"The team will follow up with the quote and next steps."
+    )
+
+
+def _post_handoff_reply(state: dict, message: str) -> str:
+    """After the quote handoff, acknowledge — never reopen lead capture."""
+    coach = _selected_coach(state)
+    name = coach.get("coach_name") or "the coach"
+    program = coach.get("program_name") or "the program"
+    contact = (state.get("gathered_slots") or {}).get("contact")
+    contact_bit = f" at {contact}" if contact else ""
+
+    if _PRICE_ASK.search(message):
+        return (
+            f"I can't tell you what {name} charges for {program}. "
+            f"The team will include the quote when they write{contact_bit}."
+        )
+    if _ACK.fullmatch(message.strip()) or len(message.split()) <= 2:
+        return (
+            f"You're all set — the team will follow up{contact_bit} "
+            f"about {name}'s {program}."
+        )
+    note = " ".join(message.split())
+    if len(note) > 160:
+        note = note[:160].rstrip() + "..."
+    return (
+        f"Thanks, I'll add that for the team on {name}'s {program}: {note}. "
+        f"They're already set to follow up{contact_bit}."
     )
 
 
@@ -422,12 +495,15 @@ def _handle_post_selection_message(conversation_id: str, message: str) -> dict:
     but that are still genuinely useful for the team to have, and this is
     the natural moment to ask: after commitment, not before it. Round 2
     (whatever they answer, including "skip") closes out and compiles the
-    final brief.
+    final brief. After that handoff, further messages stay closed — we never
+    re-ask for name/email.
     """
     state = _conversations_in_memory[conversation_id]
     state["messages"].append({"role": "user", "content": message})
 
-    if _PRICE_ASK.search(message) or _EMAIL.search(message) or not state.get("awaiting_optional_details"):
+    if state.get("handoff_complete"):
+        reply, mode = _post_handoff_reply(state, message), "stay"
+    elif _PRICE_ASK.search(message) or _EMAIL.search(message) or not state.get("awaiting_optional_details"):
         reply, mode = _selection_reply(state, message)
     else:
         reply, mode = _closing_reply(state, message), "close"
@@ -437,6 +513,7 @@ def _handle_post_selection_message(conversation_id: str, message: str) -> dict:
     if mode == "close":
         state = run_summarizer(state)
         state["awaiting_optional_details"] = False
+        state["handoff_complete"] = True
 
     state["messages"].append({"role": "assistant", "content": reply})
     state["final_reply"] = reply
@@ -503,6 +580,8 @@ def run_turn(
             "matched_coach_scores": {},
             "coach_selected": False,
             "post_selection_turns": 0,
+            "awaiting_optional_details": False,
+            "handoff_complete": False,
             "outcome": "in_progress",
             "draft_reply": "",
             "guardrail_violated": False,
