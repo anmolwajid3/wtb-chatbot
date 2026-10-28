@@ -1117,7 +1117,9 @@ async function showGreeting() {
       const data = await response.json();
       conversationId = data.conversation_id;
       removeThinkingIndicator();
-      addBotMessage(data.reply);
+      if (data.reply && String(data.reply).trim()) {
+        addBotMessage(data.reply);
+      }
       currentCoachMatches = data.coach_matches || [];
       if (data.coach_matches && data.coach_matches.length === 1) {
         addCoachCards(data.coach_matches);

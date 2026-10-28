@@ -247,6 +247,7 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
     state["post_selection_turns"] = 0
     state["awaiting_optional_details"] = False
     state["handoff_complete"] = False
+    state["session_closed"] = False
 
     reply = t(
         _locale(state),
@@ -305,7 +306,12 @@ _SCHEDULE = re.compile(
 )
 _ACK = re.compile(
     r"^(okay|ok|okey|okei|thanks|thank you|thx|great|perfect|sounds good|"
-    r"got it|cheers|bye|goodbye|cool|nice|kiitos|joo|selvä|tack)[.!]?$",
+    r"got it|cheers|cool|nice|kiitos|joo|selvä|tack)[.!]?$",
+    re.I,
+)
+_BYE = re.compile(
+    r"^(bye|goodbye|good bye|see you|cya|later|"
+    r"hei hei|moikka|heippa|hejdå|hej då)[.!]?$",
     re.I,
 )
 _SKIP_OPTIONAL = re.compile(
@@ -512,8 +518,26 @@ def _closing_reply(state: dict, message: str) -> str:
     )
 
 
-def _post_handoff_reply(state: dict, message: str) -> str:
-    """After the quote handoff, acknowledge — never reopen lead capture."""
+def _is_closing_ack(message: str) -> bool:
+    text = (message or "").strip()
+    if not text:
+        return False
+    if _ACK.fullmatch(text) or _BYE.fullmatch(text):
+        return True
+    # Short wrap-ups like "ok thanks" / "bye!" after handoff.
+    return len(text.split()) <= 2 and bool(
+        re.search(r"\b(ok|okay|bye|thanks|thank|kiitos|tack|moikka)\b", text, re.I)
+    )
+
+
+def _post_handoff_reply(state: dict, message: str) -> tuple[str, str]:
+    """
+    After quote handoff: one short goodbye on ok/bye, then silence.
+    Never reopen lead capture or repeat the long "you're all set" loop.
+    """
+    if state.get("session_closed"):
+        return "", "silent"
+
     locale = _locale(state)
     coach = _selected_coach(state)
     name = coach.get("coach_name") or "the coach"
@@ -525,18 +549,15 @@ def _post_handoff_reply(state: dict, message: str) -> str:
         return (
             f"I can't tell you what {name} charges for {program}. "
             f"The team will include the quote when they write{contact_bit}."
-        )
-    if _ACK.fullmatch(message.strip()) or len(message.split()) <= 2:
-        return t(
-            locale,
-            "post_handoff_ack",
-            contact_bit=contact_bit,
-            coach_name=name,
-            program=program,
-        )
+        ), "stay"
+
+    if _is_closing_ack(message):
+        return t(locale, "post_handoff_goodbye"), "farewell"
+
     note = " ".join(message.split())
     if len(note) > 160:
         note = note[:160].rstrip() + "..."
+    # Extra detail after handoff is noted once, then the session closes.
     return t(
         locale,
         "post_handoff_add",
@@ -544,7 +565,7 @@ def _post_handoff_reply(state: dict, message: str) -> str:
         program=program,
         note=note,
         contact_bit=contact_bit,
-    )
+    ), "farewell"
 
 
 def _handle_post_selection_message(conversation_id: str, message: str) -> dict:
@@ -561,14 +582,14 @@ def _handle_post_selection_message(conversation_id: str, message: str) -> dict:
     but that are still genuinely useful for the team to have, and this is
     the natural moment to ask: after commitment, not before it. Round 2
     (whatever they answer, including "skip") closes out and compiles the
-    final brief. After that handoff, further messages stay closed — we never
-    re-ask for name/email.
+    final brief. After that handoff, one short goodbye on ok/bye is allowed;
+    further turns stay silent.
     """
     state = _conversations_in_memory[conversation_id]
     state["messages"].append({"role": "user", "content": message})
 
     if state.get("handoff_complete"):
-        reply, mode = _post_handoff_reply(state, message), "stay"
+        reply, mode = _post_handoff_reply(state, message)
     elif _PRICE_ASK.search(message) or _EMAIL.search(message) or not state.get("awaiting_optional_details"):
         reply, mode = _selection_reply(state, message)
     else:
@@ -580,8 +601,12 @@ def _handle_post_selection_message(conversation_id: str, message: str) -> dict:
         state = run_summarizer(state)
         state["awaiting_optional_details"] = False
         state["handoff_complete"] = True
+    if mode == "farewell":
+        state["session_closed"] = True
+        state["handoff_complete"] = True
 
-    state["messages"].append({"role": "assistant", "content": reply})
+    if reply:
+        state["messages"].append({"role": "assistant", "content": reply})
     state["final_reply"] = reply
     _conversations_in_memory[conversation_id] = state
 
@@ -658,6 +683,7 @@ def run_turn(
             "post_selection_turns": 0,
             "awaiting_optional_details": False,
             "handoff_complete": False,
+            "session_closed": False,
             "outcome": "in_progress",
             "draft_reply": "",
             "guardrail_violated": False,

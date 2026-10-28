@@ -213,19 +213,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "sv": " Jag har redan {facts}.",
         "fi": " Minulla on jo {facts}.",
     },
-    "post_handoff_ack": {
-        "en": (
-            "You're all set — the team will follow up{contact_bit} "
-            "about {coach_name}'s {program}."
-        ),
-        "sv": (
-            "Då är ni klara — teamet följer upp{contact_bit} "
-            "om {coach_name}s {program}."
-        ),
-        "fi": (
-            "Valmista — tiimi jatkaa{contact_bit} "
-            "ohjelman {coach_name} / {program} kanssa."
-        ),
+    "post_handoff_goodbye": {
+        "en": "Glad I could help — the team will take it from here. Take care!",
+        "sv": "Kul att jag kunde hjälpa — teamet tar det härifrån. Ha det bra!",
+        "fi": "Kiva kun pystyin auttamaan — tiimi hoitaa tästä eteenpäin. Hei hei!",
     },
     "post_handoff_add": {
         "en": (

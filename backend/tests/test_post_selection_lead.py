@@ -93,12 +93,13 @@ def test_transcript_path_never_reasks_after_handoff():
 
         r3 = _handle_post_selection_message(conv_id, "okay")
         assert "name and email" not in r3["reply"].lower()
-        assert "all set" in r3["reply"].lower() or "follow up" in r3["reply"].lower()
-        assert _conversations_in_memory[conv_id]["handoff_complete"] is True
+        assert "You're all set" not in r3["reply"]
+        assert "take care" in r3["reply"].lower() or "glad" in r3["reply"].lower()
+        assert _conversations_in_memory[conv_id]["session_closed"] is True
 
-        r4 = _handle_post_selection_message(conv_id, "Sakari Kostilainen is the name")
-        assert "name and email" not in r4["reply"].lower()
-        assert "still need" not in r4["reply"].lower()
+        r4 = _handle_post_selection_message(conv_id, "bye")
+        assert r4["reply"] == ""
+        assert _conversations_in_memory[conv_id]["session_closed"] is True
 
 
 def test_okay_during_optional_details_closes_without_reask():
@@ -119,3 +120,36 @@ def test_okay_during_optional_details_closes_without_reask():
         result = _handle_post_selection_message(conv_id, "okay")
     assert "name and email" not in result["reply"].lower()
     assert _conversations_in_memory[conv_id]["handoff_complete"] is True
+
+
+def test_ok_then_bye_after_handoff_ends_session():
+    """Production transcript: handoff → ok (one goodbye) → bye (silence)."""
+    conv_id = "conv-lead-3"
+    _conversations_in_memory[conv_id] = _state(
+        gathered_slots={
+            "theme": "motivation",
+            "timing": "soon",
+            "contact": "emmadawson@gmail.com",
+        },
+        awaiting_optional_details=False,
+        handoff_complete=True,
+        session_closed=False,
+    )
+    with (
+        patch("app.graph._selected_coach", return_value=COACH),
+        patch("app.graph.save_conversation_state"),
+        patch("app.graph.run_summarizer", side_effect=lambda s: s),
+    ):
+        r_ok = _handle_post_selection_message(conv_id, "ok")
+        assert r_ok["reply"]
+        assert "You're all set" not in r_ok["reply"]
+        assert "emmadawson@gmail.com" not in r_ok["reply"]
+        assert _conversations_in_memory[conv_id]["session_closed"] is True
+
+        r_bye = _handle_post_selection_message(conv_id, "bye")
+        assert r_bye["reply"] == ""
+        # No second assistant bubble recorded for silence.
+        assistant_msgs = [
+            m for m in _conversations_in_memory[conv_id]["messages"] if m["role"] == "assistant"
+        ]
+        assert len(assistant_msgs) == 1
