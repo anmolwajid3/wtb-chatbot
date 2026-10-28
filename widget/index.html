@@ -1102,7 +1102,12 @@ async function showGreeting() {
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversation_id: conversationId, message: text, organization_slug: companySlug || null }),
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          message: text,
+          organization_slug: companySlug || null,
+          locale: locale,
+        }),
       });
 
       if (!response.ok) {
@@ -1204,6 +1209,7 @@ async function showGreeting() {
           message: '',
           selected_coach_id: coach.coach_id,
           organization_slug: companySlug || null,
+          locale: locale,
         }),
       });
       if (!response.ok) throw new Error('Server responded with ' + response.status);

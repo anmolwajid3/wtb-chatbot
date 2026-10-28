@@ -100,6 +100,11 @@ def test_warmup_opener_is_natural_not_own_words():
     assert reply == OPENER_NEED_SITUATION
     assert "own words" not in reply.lower()
     assert "in your own words" not in reply.lower()
+    # Finnish session must not fall back to the English opener.
+    fi = follow_up_reply({}, "moi", locale="fi")
+    assert fi != OPENER_NEED_SITUATION
+    assert "own words" not in fi.lower()
+    assert "Kerro" in fi
 
 
 def test_boundary_reply_returns_to_coaching():

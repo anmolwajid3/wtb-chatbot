@@ -33,6 +33,7 @@ class ChatRequest(BaseModel):
     message: str = ""
     selected_coach_id: str | None = None
     organization_slug: str | None = None
+    locale: str | None = None
 
 
 class ChatResponse(BaseModel):
@@ -106,6 +107,7 @@ def chat(request: ChatRequest) -> ChatResponse:
         request.message,
         request.selected_coach_id,
         organization_id,
+        locale=request.locale,
     )
     return ChatResponse(**result)
 
