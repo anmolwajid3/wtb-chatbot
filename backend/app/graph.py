@@ -35,6 +35,7 @@ from app.agents.guardrail_check import run_guardrail_check
 from app.agents.response_reviewer import run_response_reviewer
 from app.agents.summarizer import run_summarizer
 from app.db.connection import save_conversation_state, fetch_coaches_by_ids
+from app.i18n import normalize_locale, t
 
 
 class ChatState(TypedDict):
@@ -244,10 +245,16 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
     state["outcome"] = "matched"
     state["coach_selected"] = True
     state["post_selection_turns"] = 0
+    state["awaiting_optional_details"] = False
+    state["handoff_complete"] = False
+    state["session_closed"] = False
 
-    reply = (
-        f"Great choice, {coach_name}'s {program_name} it is.{_known_fit_sentence(state)} "
-        f"Could I get your name and email so the team can follow up with next steps?"
+    reply = t(
+        _locale(state),
+        "coach_selected",
+        coach_name=coach_name,
+        program_name=program_name,
+        known=_known_fit_sentence(state),
     )
     state["messages"].append({
         "role": "user",
@@ -275,23 +282,68 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
     }
 
 
-_PRICE_ASK = re.compile(r"\b(price|pricing|cost|how much|fee|fees|charg\w*)\b", re.I)
+_PRICE_ASK = re.compile(
+    r"\b(price|pricing|cost|how much|fee|fees|charg\w*|hinta|hinnoittelu|maksaa|kustannus|pris|kostar|kostnad)\b",
+    re.I,
+)
 _EMAIL = re.compile(r"[\w.+-]+@[\w.-]+\.\w+")
-_FORMAT = re.compile(r"\b(remote|distributed|virtual|online|hybrid|in[- ]person)\b", re.I)
+_FORMAT = re.compile(
+    r"\b("
+    r"remote|distributed|virtual|online|hybrid|"
+    r"in[- ]person|face[- ]to[- ]face|onsite|on[- ]site|"
+    r"lähi|close(?:\s+training)?"
+    r")\b",
+    re.I,
+)
 _SCHEDULE = re.compile(
-    r"\b(monday|tuesday|wednesday|thursday|friday|schedule|morning|evening|calendar)\b",
+    r"\b("
+    r"monday|tuesday|wednesday|thursday|friday|"
+    r"weekday|weekdays|weekend|weekends|"
+    r"schedule|morning|evening|calendar|"
+    r"arkisin|viikonloppu|maanantai|tiistai|keskiviikko|torstai|perjantai"
+    r")\b",
+    re.I,
+)
+_ACK = re.compile(
+    r"^(okay|ok|okey|okei|thanks|thank you|thx|great|perfect|sounds good|"
+    r"got it|cheers|cool|nice|kiitos|joo|selvä|tack)[.!]?$",
+    re.I,
+)
+_BYE = re.compile(
+    r"^(bye|goodbye|good bye|see you|cya|later|"
+    r"hei hei|moikka|heippa|hejdå|hej då)[.!]?$",
+    re.I,
+)
+_SKIP_OPTIONAL = re.compile(
+    r"^(skip|no|nothing|nope|n/a|none|okay|ok|okey|okei|ohita|ei|ei mitään|hoppa)[.!]?$",
     re.I,
 )
 
 
+def _locale(state: dict) -> str:
+    return normalize_locale(state.get("locale"))
+
+
+def _join_phrases(locale: str, items: list[str]) -> str:
+    if not items:
+        return ""
+    if len(items) == 1:
+        return items[0]
+    conj = {"en": "and", "sv": "och", "fi": "ja"}.get(locale, "and")
+    if locale == "en":
+        return ", ".join(items[:-1]) + ", and " + items[-1]
+    return ", ".join(items[:-1]) + f" {conj} " + items[-1]
+
+
 def _known_fit_facts(state: dict) -> list[str]:
+    locale = _locale(state)
     slots = state.get("gathered_slots") or {}
     need = slots.get("need_description") or ""
     facts = []
     if slots.get("group_size"):
-        facts.append(f"about {slots['group_size']} people")
+        facts.append(t(locale, "fact_group_size", n=slots["group_size"]))
     if slots.get("timing"):
-        facts.append(f"starting {slots['timing']}")
+        facts.append(t(locale, "fact_timing", timing=slots["timing"]))
     found_format = _FORMAT.search(need)
     if found_format:
         word = found_format.group(0).lower().replace("-", " ")
@@ -303,19 +355,20 @@ def _known_fit_sentence(state: dict) -> str:
     facts = _known_fit_facts(state)
     if not facts:
         return ""
-    return " I already have " + ", ".join(facts) + "."
+    return t(_locale(state), "known_fit_prefix", facts=", ".join(facts))
 
 
 def _missing_optional_details(state: dict) -> list[str]:
+    locale = _locale(state)
     slots = state.get("gathered_slots") or {}
     need = slots.get("need_description") or ""
     missing = []
     if not slots.get("group_size"):
-        missing.append("roughly how many people")
+        missing.append(t(locale, "optional_group_size"))
     if not _FORMAT.search(need):
-        missing.append("whether in-person, remote, or hybrid works best")
+        missing.append(t(locale, "optional_format"))
     if not _SCHEDULE.search(need):
-        missing.append("any day or time to work around")
+        missing.append(t(locale, "optional_schedule"))
     return missing
 
 
@@ -327,19 +380,44 @@ def _selected_coach(state: dict) -> dict:
     return rows[0] if rows else {}
 
 
+def _ask_optional_details(state: dict, contact: str, program: str, known: str) -> tuple[str, str]:
+    locale = _locale(state)
+    missing = _missing_optional_details(state)
+    if not missing:
+        return t(
+            locale,
+            "thanks_use_email_only",
+            contact=contact,
+            program=program,
+            known=known,
+        ), "close"
+    ask = _join_phrases(locale, missing)
+    return t(
+        locale,
+        "thanks_use_email_ask_optional",
+        contact=contact,
+        program=program,
+        known=known,
+        ask=ask,
+    ), "ask"
+
+
 def _selection_reply(state: dict, message: str) -> tuple[str, str]:
     """Answer the message in front of us. Returns the reply and stay, ask, or close."""
+    locale = _locale(state)
     coach = _selected_coach(state)
     name = coach.get("coach_name") or "that coach"
     program = coach.get("program_name") or "the program"
     known = _known_fit_sentence(state)
+    slots = dict(state.get("gathered_slots") or {})
+    existing_contact = slots.get("contact")
+    fallback_facts = t(locale, "what_you_described")
 
     if _PRICE_ASK.search(message):
-        already = (state.get("gathered_slots") or {}).get("contact")
-        if already:
+        if existing_contact:
             return (
                 f"I can't tell you what {name} charges for {program}. "
-                f"The team will include the quote when they write to {already}.{known}"
+                f"The team will include the quote when they write to {existing_contact}.{known}"
             ), "stay"
         return (
             f"I can't tell you what {name} charges for {program}. "
@@ -348,43 +426,68 @@ def _selection_reply(state: dict, message: str) -> tuple[str, str]:
 
     email = _EMAIL.search(message)
     if email:
-        slots = dict(state.get("gathered_slots") or {})
         slots["contact"] = email.group(0)
         state["gathered_slots"] = slots
         missing = _missing_optional_details(state)
         if not missing:
-            facts = ", ".join(_known_fit_facts(state)) or "what you described"
-            return (
-                f"Thank you. I'll send {name}'s {program} to the team with {facts}. "
-                f"They'll follow up at {email.group(0)}."
+            facts = ", ".join(_known_fit_facts(state)) or fallback_facts
+            return t(
+                locale,
+                "thanks_send_close",
+                coach_name=name,
+                program=program,
+                facts=facts,
+                contact=email.group(0),
             ), "close"
-        if len(missing) == 1:
-            ask = missing[0]
-        else:
-            ask = ", ".join(missing[:-1]) + ", and " + missing[-1]
-        return (
-            f"Thank you. I'll use {email.group(0)} for the follow-up on {program}.{known} "
-            f"If you have it, {ask}? Skipping that is fine."
-        ), "ask"
+        return _ask_optional_details(state, email.group(0), program, known)
+
+    # Contact already captured — never re-ask for name/email.
+    if existing_contact:
+        if not state.get("awaiting_optional_details"):
+            missing = _missing_optional_details(state)
+            if missing:
+                return _ask_optional_details(state, existing_contact, program, known)
+            facts = ", ".join(_known_fit_facts(state)) or fallback_facts
+            return t(
+                locale,
+                "thanks_already_have_close",
+                contact=existing_contact,
+                coach_name=name,
+                program=program,
+                facts=facts,
+            ), "close"
+        return t(
+            locale,
+            "thanks_already_have_stay",
+            contact=existing_contact,
+            coach_name=name,
+            program=program,
+            known=known,
+        ), "close"
 
     lowered = message.lower()
-    if coach.get("duration") and re.search(r"\b(how long|duration|weeks|length)\b", lowered):
+    if coach.get("duration") and re.search(r"\b(how long|duration|weeks|length|kauan|kesto)\b", lowered):
         return (
             f"{program} with {name} runs {coach['duration']}.{known} "
-            f"I still need your name and email before the team can follow up."
+            + t(locale, "still_need_contact", coach_name=name, program_name=program, known="")
         ), "stay"
-    if coach.get("delivery_format") and re.search(r"\b(remote|hybrid|format|online|in person|in-person)\b", lowered):
+    if coach.get("delivery_format") and re.search(r"\b(remote|hybrid|format|online|in person|in-person|lähi|eta|etä)\b", lowered):
         return (
             f"{name} delivers {program} as {coach['delivery_format']}.{known} "
-            f"I still need your name and email before the team can follow up."
+            + t(locale, "still_need_contact", coach_name=name, program_name=program, known="")
         ), "stay"
 
-    return (
-        f"I still need your name and email so the team can follow up on {name}'s {program}.{known}"
+    return t(
+        locale,
+        "still_need_contact",
+        coach_name=name,
+        program_name=program,
+        known=known,
     ), "stay"
 
 
 def _closing_reply(state: dict, message: str) -> str:
+    locale = _locale(state)
     coach = _selected_coach(state)
     name = coach.get("coach_name") or "the coach"
     program = coach.get("program_name") or "the program"
@@ -396,16 +499,73 @@ def _closing_reply(state: dict, message: str) -> str:
             f"I can't tell you what {name} charges for {program}. "
             f"I'll send what I have to the team and they'll include the quote when they write."
         )
-    if re.fullmatch(r"(skip|no|nothing|nope|n/a|none)[.!]?", note, re.I):
+    if _SKIP_OPTIONAL.fullmatch(note):
         facts = ", ".join(_known_fit_facts(state))
-        extra = f" I already have {facts}." if facts else ""
-        return (
-            f"No problem.{extra} I'll send {name}'s {program} to the team and they'll be in touch."
+        extra = t(locale, "already_have_facts", facts=facts) if facts else ""
+        return t(
+            locale,
+            "skip_optional_close",
+            extra=extra,
+            coach_name=name,
+            program=program,
         )
-    return (
-        f"I'll pass that along with {name}'s {program}: {note}. "
-        f"The team will follow up with the quote and next steps."
+    return t(
+        locale,
+        "pass_along",
+        coach_name=name,
+        program=program,
+        note=note,
     )
+
+
+def _is_closing_ack(message: str) -> bool:
+    text = (message or "").strip()
+    if not text:
+        return False
+    if _ACK.fullmatch(text) or _BYE.fullmatch(text):
+        return True
+    # Short wrap-ups like "ok thanks" / "bye!" after handoff.
+    return len(text.split()) <= 2 and bool(
+        re.search(r"\b(ok|okay|bye|thanks|thank|kiitos|tack|moikka)\b", text, re.I)
+    )
+
+
+def _post_handoff_reply(state: dict, message: str) -> tuple[str, str]:
+    """
+    After quote handoff: one short goodbye on ok/bye, then silence.
+    Never reopen lead capture or repeat the long "you're all set" loop.
+    """
+    if state.get("session_closed"):
+        return "", "silent"
+
+    locale = _locale(state)
+    coach = _selected_coach(state)
+    name = coach.get("coach_name") or "the coach"
+    program = coach.get("program_name") or "the program"
+    contact = (state.get("gathered_slots") or {}).get("contact")
+    contact_bit = t(locale, "contact_at", contact=contact) if contact else ""
+
+    if _PRICE_ASK.search(message):
+        return (
+            f"I can't tell you what {name} charges for {program}. "
+            f"The team will include the quote when they write{contact_bit}."
+        ), "stay"
+
+    if _is_closing_ack(message):
+        return t(locale, "post_handoff_goodbye"), "farewell"
+
+    note = " ".join(message.split())
+    if len(note) > 160:
+        note = note[:160].rstrip() + "..."
+    # Extra detail after handoff is noted once, then the session closes.
+    return t(
+        locale,
+        "post_handoff_add",
+        coach_name=name,
+        program=program,
+        note=note,
+        contact_bit=contact_bit,
+    ), "farewell"
 
 
 def _handle_post_selection_message(conversation_id: str, message: str) -> dict:
@@ -422,12 +582,15 @@ def _handle_post_selection_message(conversation_id: str, message: str) -> dict:
     but that are still genuinely useful for the team to have, and this is
     the natural moment to ask: after commitment, not before it. Round 2
     (whatever they answer, including "skip") closes out and compiles the
-    final brief.
+    final brief. After that handoff, one short goodbye on ok/bye is allowed;
+    further turns stay silent.
     """
     state = _conversations_in_memory[conversation_id]
     state["messages"].append({"role": "user", "content": message})
 
-    if _PRICE_ASK.search(message) or _EMAIL.search(message) or not state.get("awaiting_optional_details"):
+    if state.get("handoff_complete"):
+        reply, mode = _post_handoff_reply(state, message)
+    elif _PRICE_ASK.search(message) or _EMAIL.search(message) or not state.get("awaiting_optional_details"):
         reply, mode = _selection_reply(state, message)
     else:
         reply, mode = _closing_reply(state, message), "close"
@@ -437,8 +600,13 @@ def _handle_post_selection_message(conversation_id: str, message: str) -> dict:
     if mode == "close":
         state = run_summarizer(state)
         state["awaiting_optional_details"] = False
+        state["handoff_complete"] = True
+    if mode == "farewell":
+        state["session_closed"] = True
+        state["handoff_complete"] = True
 
-    state["messages"].append({"role": "assistant", "content": reply})
+    if reply:
+        state["messages"].append({"role": "assistant", "content": reply})
     state["final_reply"] = reply
     _conversations_in_memory[conversation_id] = state
 
@@ -471,7 +639,10 @@ def run_turn(
     selected_coach_id: str | None = None,
     organization_id: str | None = None,
     record: bool = True,
+    locale: str | None = None,
 ) -> dict:
+    locale = normalize_locale(locale)
+
     if selected_coach_id:
         if not conversation_id:
             return {
@@ -482,9 +653,16 @@ def run_turn(
                 "coach_matches": [],
                 **_empty_debug_fields(),
             }
+        if conversation_id in _conversations_in_memory:
+            _conversations_in_memory[conversation_id]["locale"] = locale or (
+                _conversations_in_memory[conversation_id].get("locale") or "en"
+            )
         return _handle_coach_selection(conversation_id, selected_coach_id)
 
     if conversation_id and conversation_id in _conversations_in_memory:
+        _conversations_in_memory[conversation_id]["locale"] = locale or (
+            _conversations_in_memory[conversation_id].get("locale") or "en"
+        )
         if _conversations_in_memory[conversation_id].get("coach_selected"):
             return _handle_post_selection_message(conversation_id, message)
 
@@ -503,6 +681,9 @@ def run_turn(
             "matched_coach_scores": {},
             "coach_selected": False,
             "post_selection_turns": 0,
+            "awaiting_optional_details": False,
+            "handoff_complete": False,
+            "session_closed": False,
             "outcome": "in_progress",
             "draft_reply": "",
             "guardrail_violated": False,
@@ -517,11 +698,13 @@ def run_turn(
             "final_reply": "",
             "quote_summary": "",
             "organization_id": organization_id,
+            "locale": locale,
         }
     else:
         state = _conversations_in_memory[conversation_id]
 
     state["organization_id"] = organization_id or state.get("organization_id")
+    state["locale"] = locale or state.get("locale") or "en"
 
     state["messages"].append({"role": "user", "content": message})
 

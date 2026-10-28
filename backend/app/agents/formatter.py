@@ -10,6 +10,12 @@ anything because it is never given anything to invent from.
 """
 import re
 from app.agents.guardrail_check import visitor_advice_rule
+from app.agents.grounding import (
+    compose_match_reply,
+    compose_no_match_reply,
+    reply_is_grounded,
+)
+from app.i18n import OPENER_NEED_SITUATION, language_label, t
 from app.llm import get_llm
 from app.db.connection import fetch_coaches_by_ids, fetch_match_settings, get_agent_prompt
 
@@ -67,49 +73,56 @@ Conversation so far:
 
 
 def _price_question(text: str) -> bool:
-    return bool(re.search(r"\b(price|pricing|cost|how much|fee|fees)\b", text, re.I))
+    return bool(
+        re.search(
+            r"\b(price|pricing|cost|how much|fee|fees|hinta|hinnoittelu|maksaa|kustannus|pris|kostar|kostnad)\b",
+            text,
+            re.I,
+        )
+    )
 
 
-def boundary_reply(slots: dict, lead: str) -> str:
+def boundary_reply(slots: dict, lead: str, locale: str | None = None) -> str:
     """Refuse or redirect, then ask only the next coaching question still missing."""
     has_situation = bool(slots.get("theme") or slots.get("need_description"))
     if not has_situation:
-        return f"{lead} If you want help finding a coach, what's going on with the team?"
+        return f"{lead} {t(locale, 'opener_after_boundary')}"
     if not slots.get("timing"):
-        return f"{lead} When would you want this to start?"
+        return f"{lead} {t(locale, 'ask_timing_short')}"
     return lead
 
 
-def follow_up_reply(slots: dict, latest_user: str) -> str | None:
+def follow_up_reply(slots: dict, latest_user: str, locale: str | None = None) -> str | None:
     """One next question. None means the conversation is ready for a real match."""
     has_situation = bool(slots.get("theme") or slots.get("need_description"))
     if not has_situation:
         if _price_question(latest_user):
-            return "I can't talk about price until I know the fit. What's going on with the team?"
-        return "What's going on, in your own words?"
+            return t(locale, "opener_after_price")
+        return t(locale, "opener_need_situation")
     if not slots.get("timing"):
-        return "That gives me a real picture. When would you want this to start?"
+        return t(locale, "ask_timing")
     return None
 
 
 def run_formatter(state: dict) -> dict:
     latest_user = state["messages"][-1]["content"] if state.get("messages") else ""
     slots = state.get("gathered_slots", {})
+    locale = state.get("locale")
     if state.get("advice_blocked") or visitor_advice_rule(latest_user, state.get("organization_id")):
         state["advice_blocked"] = True
-        reply = boundary_reply(slots, "I can't give medical or legal advice.")
+        reply = boundary_reply(slots, t(locale, "refuse_medical_legal"), locale)
         state["draft_reply"] = reply
         state["final_reply"] = reply
         return state
     if state.get("off_topic_this_turn"):
-        reply = boundary_reply(slots, "That's outside what I can help with here.")
+        reply = boundary_reply(slots, t(locale, "refuse_off_topic"), locale)
         state["draft_reply"] = reply
         state["final_reply"] = reply
         return state
     if not state.get("ready_to_match"):
-        reply = follow_up_reply(slots, latest_user)
+        reply = follow_up_reply(slots, latest_user, locale)
         if reply is None:
-            reply = "Before I suggest anyone, is there one more detail about how this is showing up for the team?"
+            reply = t(locale, "ask_one_more_detail")
         state["draft_reply"] = reply
         state["final_reply"] = reply
         return state
@@ -125,6 +138,14 @@ def run_formatter(state: dict) -> dict:
         for coach in coaches:
             coach["match_score"] = scores.get(str(coach["id"]))
     matching_was_attempted = bool(state.get("ready_to_match"))
+
+    # Grounded template first — this is the anti-drift baseline. An LLM polish
+    # is kept only when it still passes the same checklist.
+    grounded = (
+        compose_match_reply(coaches, slots, locale)
+        if coaches
+        else compose_no_match_reply(locale)
+    )
 
     slots = state.get("gathered_slots", {})
     required_fields = {"theme": "the theme/topic", "need_description": "more detail on the need", "timing": "timing"}
@@ -152,12 +173,22 @@ def run_formatter(state: dict) -> dict:
     prompt += (
         "\n\nNEVER give medical or legal advice. If the visitor asked for either, "
         "refuse in one sentence and then continue with the coaching conversation."
+        "\nYou MUST keep every coach_name from the verified list above in your reply."
+        "\nIf the coach list is empty, do not invent a coach or program name."
+        f"\nAlways write the entire reply in {language_label(locale)}."
     )
     if settings["show_match_score"] and coaches:
         prompt += "\nWhen you name a profile, include its match_score as a percentage."
 
-    llm = get_llm(temperature=0.4, agent_name="formatter", organization_id=state.get("organization_id"))
-    response = llm.invoke([{"role": "system", "content": prompt}])
+    try:
+        llm = get_llm(temperature=0.2, agent_name="formatter", organization_id=state.get("organization_id"))
+        response = llm.invoke([{"role": "system", "content": prompt}])
+        polished = (response.content or "").strip()
+    except Exception:
+        polished = ""
 
-    state["draft_reply"] = response.content
+    if polished and reply_is_grounded(polished, coaches, matching_was_attempted):
+        state["draft_reply"] = polished
+    else:
+        state["draft_reply"] = grounded
     return state
