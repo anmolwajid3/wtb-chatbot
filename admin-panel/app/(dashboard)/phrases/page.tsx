@@ -31,8 +31,8 @@ async function addPhrase(formData: FormData) {
   const workspace = await getWorkspace();
   const pool = getPool();
   await pool.query(
-    `INSERT INTO example_phrases (situation_type, phrase_text, organization_id) VALUES ($1, $2, $3)`,
-    [situation_type, phrase_text, workspace?.organization?.id ?? null]
+    `INSERT INTO example_phrases (situation_type, phrase_text, organization_id, locale) VALUES ($1, $2, $3, $4)`,
+    [situation_type, phrase_text, workspace?.organization?.id ?? null, "en"]
   );
   revalidatePath("/phrases");
 }

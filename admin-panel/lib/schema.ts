@@ -46,6 +46,8 @@ const STATEMENTS = [
   `ALTER TABLE example_phrases ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id)`,
   `ALTER TABLE guardrails ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id)`,
   `ALTER TABLE opening_greetings ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id)`,
+  `ALTER TABLE opening_greetings ADD COLUMN IF NOT EXISTS locale TEXT NOT NULL DEFAULT 'en'`,
+  `ALTER TABLE example_phrases ADD COLUMN IF NOT EXISTS locale TEXT NOT NULL DEFAULT 'en'`,
   `ALTER TABLE conversations ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id)`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free'`,
