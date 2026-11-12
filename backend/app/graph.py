@@ -652,10 +652,10 @@ def run_turn(
         if conversation_id
         else None
     )
+    # URL/widget locale locks the session — never switch from visitor text.
     locale = resolve_locale(
         requested=locale,
         session_locale=(existing or {}).get("locale"),
-        message=message,
     )
 
     if selected_coach_id:

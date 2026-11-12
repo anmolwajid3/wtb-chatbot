@@ -1,17 +1,15 @@
-"""Locale must survive LangGraph turns and stick for Finnish intake."""
-from typing import TypedDict
+"""URL/widget locale locks the session; never switch mid-chat from visitor text."""
 from unittest.mock import patch
 
 from langgraph.graph import END, StateGraph
 
 from app.agents.formatter import follow_up_reply, run_formatter
 from app.graph import ChatState, _conversations_in_memory, build_graph, run_turn
-from app.i18n import infer_locale_from_text, resolve_locale, t
+from app.i18n import default_greeting, resolve_locale, t
 import app.graph as graph_mod
 
 
 def test_langgraph_keeps_locale_when_declared_on_chatstate():
-    """Regression: undeclared keys were stripped; ChatState must declare locale."""
     assert "locale" in ChatState.__annotations__
 
     def echo(state: ChatState) -> ChatState:
@@ -59,28 +57,30 @@ def test_langgraph_keeps_locale_when_declared_on_chatstate():
     )
     assert out["locale"] == "fi"
     assert out["final_reply"] == t("fi", "ask_timing")
-    assert "When would you" not in out["final_reply"]
 
 
-def test_infer_finnish_from_transcript_line():
-    assert infer_locale_from_text("Tiimini on menettämässä motivaationsa.") == "fi"
-    assert resolve_locale(requested=None, message="Haluaisin aloittaa noin kuukauden kuluttua.") == "fi"
-    # Cookie stuck on en while visitor writes Finnish → upgrade.
-    assert resolve_locale(requested="en", message="Tiimini on menettämässä motivaationsa.") == "fi"
-    # Explicit FI wins.
-    assert resolve_locale(requested="fi", message="hello") == "fi"
-    # Missing request keeps session FI.
-    assert resolve_locale(requested=None, session_locale="fi", message="ok") == "fi"
+def test_url_lang_locks_session_no_midchat_switch():
+    """?lang=en must stay English even when the visitor writes Finnish."""
+    assert resolve_locale(requested="en", message="Tiimini on menettämässä motivaationsa.") == "en"
+    assert resolve_locale(
+        requested="fi",
+        session_locale="en",
+        message="Haluaisin aloittaa noin kuukauden kuluttua.",
+    ) == "en"
+    assert resolve_locale(requested="fi", session_locale=None) == "fi"
+    assert resolve_locale(requested=None, session_locale="sv") == "sv"
+
+
+def test_locale_packs_do_not_mix():
+    assert "Kerro" in default_greeting("fi")
+    assert "Tell me" in default_greeting("en") or "Hi!" in default_greeting("en")
+    assert default_greeting("fi") != default_greeting("en")
+    assert t("en", "ask_timing") != t("fi", "ask_timing")
+    assert "When would you" in t("en", "ask_timing")
+    assert "Milloin" in t("fi", "ask_timing")
 
 
 def test_formatter_timing_uses_state_locale():
-    reply = follow_up_reply(
-        {"theme": "motivaatio", "need_description": "Tiimini on menettämässä motivaationsa."},
-        "moi",
-        locale="fi",
-    )
-    assert reply == t("fi", "ask_timing")
-
     state = {
         "messages": [{"role": "user", "content": "Tiimini on menettämässä motivaationsa."}],
         "gathered_slots": {
@@ -88,17 +88,17 @@ def test_formatter_timing_uses_state_locale():
             "need_description": "Tiimini on menettämässä motivaationsa.",
         },
         "ready_to_match": False,
-        "locale": "fi",
+        "locale": "en",
     }
     out = run_formatter(state)
-    assert out["final_reply"] == t("fi", "ask_timing")
-    assert "That gives me a real picture" not in out["final_reply"]
+    # EN session stays EN despite Finnish visitor text.
+    assert out["final_reply"] == t("en", "ask_timing")
+    assert "Milloin" not in out["final_reply"]
 
 
-def test_run_turn_persists_finnish_locale_through_graph():
-    """Full turn: locale must still be fi after graph.invoke writes memory."""
+def test_run_turn_keeps_english_lock_with_finnish_message():
     graph_mod._compiled_graph = None
-    conv_id = "fi-persist-1"
+    conv_id = "en-lock-1"
     _conversations_in_memory.pop(conv_id, None)
 
     def fake_intent(state):
@@ -119,24 +119,33 @@ def test_run_turn_persists_finnish_locale_through_graph():
         state["mood_history"] = []
         return state
 
-    def fake_match(state):
-        return state
-
     with (
         patch("app.graph.run_intent_router", side_effect=fake_intent),
         patch("app.graph.run_mood_tone", side_effect=fake_mood),
-        patch("app.graph.run_coach_matcher", side_effect=fake_match),
+        patch("app.graph.run_coach_matcher", side_effect=lambda s: s),
         patch("app.graph.save_conversation_state"),
         patch("app.graph.fetch_coaches_by_ids", return_value=[]),
     ):
         graph_mod._compiled_graph = build_graph()
-        result = run_turn(
+        r1 = run_turn(
             conv_id,
             "Tiimini on menettämässä motivaationsa.",
+            locale="en",
+            record=False,
+        )
+        assert r1["reply"] == t("en", "ask_timing")
+        assert _conversations_in_memory[conv_id]["locale"] == "en"
+
+        # Later request claiming fi must not flip a locked EN session.
+        r2 = run_turn(
+            conv_id,
+            "Haluaisin aloittaa noin kuukauden kuluttua.",
             locale="fi",
             record=False,
         )
+        assert _conversations_in_memory[conv_id]["locale"] == "en"
+        assert "Milloin" not in (r2["reply"] or "")
 
-    assert result["reply"] == t("fi", "ask_timing")
-    assert "When would you want this to start" not in result["reply"]
-    assert _conversations_in_memory[conv_id]["locale"] == "fi"
+
+def test_finnish_url_pack_opener():
+    assert follow_up_reply({}, "moi", locale="fi") == t("fi", "opener_need_situation")

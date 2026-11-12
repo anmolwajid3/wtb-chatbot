@@ -125,7 +125,7 @@ def company(organization_slug: str | None = None):
 
 
 @app.get("/greeting")
-def greeting(organization_slug: str | None = None):
+def greeting(organization_slug: str | None = None, locale: str | None = None, lang: str | None = None):
     from app.db.connection import fetch_random_greeting
     organization_id = resolve_organization_id(organization_slug)
-    return {"greeting": fetch_random_greeting(organization_id)}
+    return {"greeting": fetch_random_greeting(organization_id, locale=locale or lang)}

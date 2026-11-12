@@ -1,16 +1,30 @@
 """
 Visitor-facing copy for hardcoded (non-LLM) replies.
 
-The widget cookie `harbor_locale` is sent as `locale` on /chat. Session state
-keeps that value so warm-up, timing, and post-selection lead lines stay in the
-same language as the greeting UI even when the LLM path is not used.
+Language is locked by the widget URL (`?lang=en|sv|fi`), sent as `locale` on
+/chat and /greeting. Session state keeps that locale for the whole conversation
+— never switch mid-chat from visitor text.
 """
 from __future__ import annotations
 
-import re
-
 SUPPORTED = ("en", "sv", "fi")
 DEFAULT_LOCALE = "en"
+
+# Pack defaults when DB has no locale-scoped greeting.
+DEFAULT_GREETINGS = {
+    "en": (
+        "Hi! Tell me a bit about what you're looking for — a theme, a situation, "
+        "a team size, whatever comes to mind — and I'll help point you to the right fit."
+    ),
+    "sv": (
+        "Hej! Berätta lite om vad du letar efter — ett tema, en situation, "
+        "en gruppstorlek, vad som helst — så hjälper jag dig att hitta rätt."
+    ),
+    "fi": (
+        "Hei! Kerro vähän, mitä etsit — teema, tilanne, ryhmäkoko, mikä vain "
+        "tulee mieleen — niin autan löytämään sopivan."
+    ),
+}
 
 LANGUAGE_NAME = {
     "en": "English",
@@ -310,57 +324,26 @@ def normalize_locale(locale: str | None) -> str:
     return primary if primary in SUPPORTED else DEFAULT_LOCALE
 
 
-def infer_locale_from_text(text: str | None) -> str | None:
-    """
-    Best-effort locale from visitor text. Company greetings can be Finnish even
-    when the widget cookie is still 'en', so we upgrade from message language.
-    """
-    raw = (text or "").strip()
-    if not raw:
-        return None
-    lowered = raw.lower()
-    # Swedish cues (å is strongly Swedish; common function words).
-    if re.search(r"[åÅ]", raw) or re.search(
-        r"\b(och|jag|ni|hjälp|berätta|tack|skulle|vill)\b", lowered
-    ):
-        if re.search(r"[äöåÄÖÅ]", raw) or re.search(r"\b(och|jag|berätta)\b", lowered):
-            return "sv"
-    # Finnish cues (ä/ö + common intake words from production transcripts).
-    if re.search(r"[äöÄÖ]", raw) or re.search(
-        r"\b("
-        r"että|olen|haluaisin|kuukauden|kuluttua|tiimi|tiimini|motivaatio|"
-        r"motivaationsa|valmennus|valmentaja|aloittaa|sähköposti|kiitos|moi|hei"
-        r")\b",
-        lowered,
-    ):
-        return "fi"
-    return None
-
-
 def resolve_locale(
     requested: str | None,
     session_locale: str | None = None,
-    message: str | None = None,
+    message: str | None = None,  # kept for call-site compat; never used to switch
 ) -> str:
     """
-    Pick the session language for this turn.
+    Lock language for the session from the widget URL (`?lang=` → `locale`).
 
-    Priority: explicit UI locale (when present) → inferred from message →
-    existing session locale → English. Missing request locale must NOT reset a
-    Finnish session back to English.
+    Once a session locale is set, it never changes mid-chat — including when
+    the visitor writes in another language. No text-based language inference.
     """
-    inferred = infer_locale_from_text(message)
-    if requested and str(requested).strip():
-        explicit = normalize_locale(requested)
-        # Cookie defaulted to en while the visitor writes Finnish: prefer FI.
-        if explicit == DEFAULT_LOCALE and inferred in {"fi", "sv"}:
-            return inferred
-        return explicit
-    if inferred:
-        return inferred
+    del message  # explicit: do not infer from visitor text
     if session_locale:
         return normalize_locale(session_locale)
-    return DEFAULT_LOCALE
+    return normalize_locale(requested)
+
+
+def default_greeting(locale: str | None) -> str:
+    loc = normalize_locale(locale)
+    return DEFAULT_GREETINGS.get(loc) or DEFAULT_GREETINGS[DEFAULT_LOCALE]
 
 
 def t(locale: str | None, key: str, **kwargs) -> str:
