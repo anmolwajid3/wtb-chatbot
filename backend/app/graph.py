@@ -35,7 +35,7 @@ from app.agents.guardrail_check import run_guardrail_check
 from app.agents.response_reviewer import run_response_reviewer
 from app.agents.summarizer import run_summarizer
 from app.db.connection import save_conversation_state, fetch_coaches_by_ids
-from app.i18n import normalize_locale, t
+from app.i18n import normalize_locale, resolve_locale, t
 
 
 class ChatState(TypedDict):
@@ -65,6 +65,12 @@ class ChatState(TypedDict):
     off_topic_this_turn: bool
     final_reply: str
     quote_summary: str
+    # Visitor UI language. Must be declared: LangGraph drops undeclared keys,
+    # which previously stripped locale mid-turn and forced English warm-up/lead copy.
+    locale: str
+    awaiting_optional_details: bool
+    handoff_complete: bool
+    session_closed: bool
 
 
 def _route_after_intent(state: ChatState) -> str:
@@ -641,7 +647,16 @@ def run_turn(
     record: bool = True,
     locale: str | None = None,
 ) -> dict:
-    locale = normalize_locale(locale)
+    existing = (
+        _conversations_in_memory.get(conversation_id)
+        if conversation_id
+        else None
+    )
+    locale = resolve_locale(
+        requested=locale,
+        session_locale=(existing or {}).get("locale"),
+        message=message,
+    )
 
     if selected_coach_id:
         if not conversation_id:
@@ -654,15 +669,11 @@ def run_turn(
                 **_empty_debug_fields(),
             }
         if conversation_id in _conversations_in_memory:
-            _conversations_in_memory[conversation_id]["locale"] = locale or (
-                _conversations_in_memory[conversation_id].get("locale") or "en"
-            )
+            _conversations_in_memory[conversation_id]["locale"] = locale
         return _handle_coach_selection(conversation_id, selected_coach_id)
 
     if conversation_id and conversation_id in _conversations_in_memory:
-        _conversations_in_memory[conversation_id]["locale"] = locale or (
-            _conversations_in_memory[conversation_id].get("locale") or "en"
-        )
+        _conversations_in_memory[conversation_id]["locale"] = locale
         if _conversations_in_memory[conversation_id].get("coach_selected"):
             return _handle_post_selection_message(conversation_id, message)
 
@@ -704,12 +715,14 @@ def run_turn(
         state = _conversations_in_memory[conversation_id]
 
     state["organization_id"] = organization_id or state.get("organization_id")
-    state["locale"] = locale or state.get("locale") or "en"
+    state["locale"] = locale
 
     state["messages"].append({"role": "user", "content": message})
 
     graph = get_compiled_graph()
     result_state = graph.invoke(state)
+    # Belt-and-suspenders: keep locale even if a future schema drift drops it.
+    result_state["locale"] = locale or result_state.get("locale") or "en"
 
     result_state["messages"].append({"role": "assistant", "content": result_state["final_reply"]})
     _conversations_in_memory[conversation_id] = result_state

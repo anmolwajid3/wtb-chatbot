@@ -7,6 +7,8 @@ same language as the greeting UI even when the LLM path is not used.
 """
 from __future__ import annotations
 
+import re
+
 SUPPORTED = ("en", "sv", "fi")
 DEFAULT_LOCALE = "en"
 
@@ -306,6 +308,59 @@ def normalize_locale(locale: str | None) -> str:
         return code
     primary = code.split("-", 1)[0]
     return primary if primary in SUPPORTED else DEFAULT_LOCALE
+
+
+def infer_locale_from_text(text: str | None) -> str | None:
+    """
+    Best-effort locale from visitor text. Company greetings can be Finnish even
+    when the widget cookie is still 'en', so we upgrade from message language.
+    """
+    raw = (text or "").strip()
+    if not raw:
+        return None
+    lowered = raw.lower()
+    # Swedish cues (å is strongly Swedish; common function words).
+    if re.search(r"[åÅ]", raw) or re.search(
+        r"\b(och|jag|ni|hjälp|berätta|tack|skulle|vill)\b", lowered
+    ):
+        if re.search(r"[äöåÄÖÅ]", raw) or re.search(r"\b(och|jag|berätta)\b", lowered):
+            return "sv"
+    # Finnish cues (ä/ö + common intake words from production transcripts).
+    if re.search(r"[äöÄÖ]", raw) or re.search(
+        r"\b("
+        r"että|olen|haluaisin|kuukauden|kuluttua|tiimi|tiimini|motivaatio|"
+        r"motivaationsa|valmennus|valmentaja|aloittaa|sähköposti|kiitos|moi|hei"
+        r")\b",
+        lowered,
+    ):
+        return "fi"
+    return None
+
+
+def resolve_locale(
+    requested: str | None,
+    session_locale: str | None = None,
+    message: str | None = None,
+) -> str:
+    """
+    Pick the session language for this turn.
+
+    Priority: explicit UI locale (when present) → inferred from message →
+    existing session locale → English. Missing request locale must NOT reset a
+    Finnish session back to English.
+    """
+    inferred = infer_locale_from_text(message)
+    if requested and str(requested).strip():
+        explicit = normalize_locale(requested)
+        # Cookie defaulted to en while the visitor writes Finnish: prefer FI.
+        if explicit == DEFAULT_LOCALE and inferred in {"fi", "sv"}:
+            return inferred
+        return explicit
+    if inferred:
+        return inferred
+    if session_locale:
+        return normalize_locale(session_locale)
+    return DEFAULT_LOCALE
 
 
 def t(locale: str | None, key: str, **kwargs) -> str:
