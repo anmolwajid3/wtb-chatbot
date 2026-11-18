@@ -100,7 +100,14 @@ def follow_up_reply(slots: dict, latest_user: str, locale: str | None = None) ->
             return t(locale, "opener_after_price")
         return t(locale, "opener_need_situation")
     if not slots.get("timing"):
+<<<<<<< HEAD
+        # Keep this short and varied only by context — avoid a stock "gives me a picture" line.
+        if slots.get("theme"):
+            return f"Got it — {slots['theme'][:60].rstrip('.')}. When would you want this to start?"
+        return "When would you want this to start?"
+=======
         return t(locale, "ask_timing")
+>>>>>>> 8ce9096dea37805dcd128e804bf0b5cba8eb6a14
     return None
 
 

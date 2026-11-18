@@ -9,14 +9,14 @@ export const dynamic = "force-dynamic";
 const copy = {
   en: {
     title: "Matching",
-    lede: "These rules decide when a visitor is offered people, and how many. A score under the minimum is not a match.",
+    lede: "Company matching rules for this workspace. GPT Lab and company admins set the same fields here — a score under the minimum is never shown to visitors.",
     max: "Profiles to suggest",
-    maxHint: "WTB starts at 3. The assistant never offers more than this.",
+    maxHint: "The assistant never offers more than this.",
     min: "Minimum match, percent",
-    minHint: "Anything below this is left out. 50 means a weak fit is not shown.",
+    minHint: "Anything below this is left out of suggestions and the widget graph. Use 50 to hide weak fits, or raise it (for example 70) to only show strong ones.",
     turns: "Visitor messages before a match",
     turnsHint: "The first message never matches. 2 waits for one follow-up.",
-    score: "Show the match percent in the visitor's reply",
+    score: "Show the match percent in the visitor chat (cards and graph)",
     save: "Save matching",
   },
   sv: {
