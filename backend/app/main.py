@@ -33,6 +33,7 @@ class ChatRequest(BaseModel):
     message: str = ""
     selected_coach_id: str | None = None
     organization_slug: str | None = None
+    locale: str | None = None
 
 
 class ChatResponse(BaseModel):
@@ -114,6 +115,7 @@ def chat(request: ChatRequest) -> ChatResponse:
         request.message,
         request.selected_coach_id,
         organization_id,
+        locale=request.locale,
     )
     return ChatResponse(**result)
 
@@ -131,7 +133,7 @@ def company(organization_slug: str | None = None):
 
 
 @app.get("/greeting")
-def greeting(organization_slug: str | None = None):
+def greeting(organization_slug: str | None = None, locale: str | None = None, lang: str | None = None):
     from app.db.connection import fetch_random_greeting
     organization_id = resolve_organization_id(organization_slug)
-    return {"greeting": fetch_random_greeting(organization_id)}
+    return {"greeting": fetch_random_greeting(organization_id, locale=locale or lang)}

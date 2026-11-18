@@ -176,6 +176,8 @@ CREATE TABLE IF NOT EXISTS opening_greetings (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 ALTER TABLE opening_greetings ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
+ALTER TABLE opening_greetings ADD COLUMN IF NOT EXISTS locale TEXT NOT NULL DEFAULT 'en';
+ALTER TABLE example_phrases ADD COLUMN IF NOT EXISTS locale TEXT NOT NULL DEFAULT 'en';
 
 ALTER TABLE tone_settings DROP CONSTRAINT IF EXISTS tone_settings_name_key;
 CREATE UNIQUE INDEX IF NOT EXISTS tone_settings_org_name_uidx
