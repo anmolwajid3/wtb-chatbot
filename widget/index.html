@@ -605,7 +605,7 @@
 <div class="demo-page">
   <span class="eyebrow" id="demo-kicker">Opas</span>
   <h1 id="demo-title">Find the right<br>guide for your team</h1>
-  <p id="demo-line-1">Describe the situation in your own words.</p>
+  <p id="demo-line-1">Tell us a bit about the situation you'd like help with.</p>
   <p id="demo-line-2">The assistant asks a couple of questions, then points you toward a fit.</p>
   <div class="demo-note" id="demo-note">Add ?company=your-slug to speak with one company.</div>
 </div>
@@ -656,12 +656,15 @@
 
 <script>
   const API_URL = 'http://localhost:8000/chat';
-  const companySlug = new URLSearchParams(location.search).get('company') || '';
+  const pageParams = new URLSearchParams(location.search);
+  const companySlug = pageParams.get('company') || '';
+  // URL ?lang= (or ?locale=) is authoritative for the whole chat session.
+  const SUPPORTED_LANGS = ['en', 'sv', 'fi'];
   const COPY = {
     en: {
       kicker: 'Opas',
       title: 'Find the right<br>guide for your team',
-      line1: 'Describe the situation in your own words.',
+      line1: "Tell us a bit about the situation you'd like help with.",
       line2: 'The assistant asks a couple of questions, then points you toward a fit.',
       note: 'Add ?company=your-slug to speak with one company.',
       brand: 'Opas',
@@ -678,7 +681,7 @@
     sv: {
       kicker: 'Opas',
       title: 'Hitta rätt<br>vägledare för teamet',
-      line1: 'Beskriv situationen med egna ord.',
+      line1: 'Berätta kort om situationen ni vill ha hjälp med.',
       line2: 'Assistenten ställer ett par frågor och pekar mot en passande profil.',
       note: 'Lägg till ?company=ert-namn för att prata med ett företag.',
       brand: 'Opas',
@@ -695,7 +698,7 @@
     fi: {
       kicker: 'Opas',
       title: 'Löydä oikea<br>opas tiimille',
-      line1: 'Kuvaa tilanne omin sanoin.',
+      line1: 'Kerro lyhyesti tilanteesta, johon kaipaat apua.',
       line2: 'Avustaja kysyy pari kysymystä ja osoittaa sopivaan profiiliin.',
       note: 'Lisää ?company=yrityksen-nimi keskustellaksesi yhden yrityksen kanssa.',
       brand: 'Opas',
@@ -719,11 +722,46 @@
     document.cookie = name + '=' + value + ';path=/;max-age=31536000;samesite=lax';
   }
 
-  let locale = ['en', 'sv', 'fi'].includes(readCookie('harbor_locale')) ? readCookie('harbor_locale') : 'en';
+  function readUrlLang() {
+    const raw = (pageParams.get('lang') || pageParams.get('locale') || '').toLowerCase();
+    return SUPPORTED_LANGS.includes(raw) ? raw : '';
+  }
+  const urlLang = readUrlLang();
+  let locale = urlLang
+    || (SUPPORTED_LANGS.includes(readCookie('harbor_locale')) ? readCookie('harbor_locale') : 'en');
+  if (urlLang) {
+    writeCookie('harbor_locale', locale);
+  } else {
+    // Reflect the active language in the URL so embeds stay shareable/locked.
+    pageParams.set('lang', locale);
+    const next = location.pathname + '?' + pageParams.toString() + location.hash;
+    history.replaceState({}, '', next);
+  }
+  document.documentElement.lang = locale;
   let theme = readCookie('harbor_theme') === 'light' ? 'light' : 'dark';
   document.body.classList.toggle('light', theme === 'light');
 
   function copy() { return COPY[locale]; }
+
+  function setLocale(nextLang, { resetChat } = { resetChat: false }) {
+    if (!SUPPORTED_LANGS.includes(nextLang) || nextLang === locale) {
+      if (resetChat) return;
+    }
+    locale = nextLang;
+    writeCookie('harbor_locale', locale);
+    document.documentElement.lang = locale;
+    pageParams.set('lang', locale);
+    history.replaceState({}, '', location.pathname + '?' + pageParams.toString() + location.hash);
+    applyChrome();
+    if (resetChat) {
+      conversationId = null;
+      currentCoachMatches = [];
+      messagesEl.innerHTML = '';
+      if (panel.classList.contains('open')) {
+        showGreeting();
+      }
+    }
+  }
 
   let companyBrand = null;
 
@@ -810,9 +848,7 @@
 
   document.querySelectorAll('[data-lang]').forEach((button) => {
     button.addEventListener('click', () => {
-      locale = button.getAttribute('data-lang');
-      writeCookie('harbor_locale', locale);
-      applyChrome();
+      setLocale(button.getAttribute('data-lang'), { resetChat: true });
     });
   });
   document.getElementById('theme-toggle').addEventListener('click', () => {
@@ -845,12 +881,12 @@
 
   fullscreenBtn.addEventListener('click', toggleFullscreen);
 
-  const DEFAULT_GREETING = copy().greeting;
-
-async function showGreeting() {
-    let greetingText = DEFAULT_GREETING;
+  async function showGreeting() {
+    let greetingText = copy().greeting;
     try {
-      const greetingUrl = API_URL.replace('/chat', '/greeting') + (companySlug ? ('?organization_slug=' + encodeURIComponent(companySlug)) : '');
+      const qs = new URLSearchParams({ locale: locale, lang: locale });
+      if (companySlug) qs.set('organization_slug', companySlug);
+      const greetingUrl = API_URL.replace('/chat', '/greeting') + '?' + qs.toString();
       const response = await fetch(greetingUrl);
       if (response.ok) {
         const data = await response.json();
@@ -859,7 +895,7 @@ async function showGreeting() {
         }
       }
     } catch (err) {
-      // Network error or backend unreachable — fall back to the default
+      // Network error or backend unreachable — fall back to the locale pack
       // text rather than showing nothing or breaking the widget.
       console.error('Could not fetch a random greeting, using default', err);
     }
@@ -1102,7 +1138,12 @@ async function showGreeting() {
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversation_id: conversationId, message: text, organization_slug: companySlug || null }),
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          message: text,
+          organization_slug: companySlug || null,
+          locale: locale,
+        }),
       });
 
       if (!response.ok) {
@@ -1112,7 +1153,9 @@ async function showGreeting() {
       const data = await response.json();
       conversationId = data.conversation_id;
       removeThinkingIndicator();
-      addBotMessage(data.reply);
+      if (data.reply && String(data.reply).trim()) {
+        addBotMessage(data.reply);
+      }
       currentCoachMatches = data.coach_matches || [];
       if (data.coach_matches && data.coach_matches.length === 1) {
         addCoachCards(data.coach_matches);
@@ -1204,6 +1247,7 @@ async function showGreeting() {
           message: '',
           selected_coach_id: coach.coach_id,
           organization_slug: companySlug || null,
+          locale: locale,
         }),
       });
       if (!response.ok) throw new Error('Server responded with ' + response.status);

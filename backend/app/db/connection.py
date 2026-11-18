@@ -4,9 +4,40 @@ results come back as dicts (easier to pass straight into LLM prompts as JSON-ish
 context) rather than raw tuples.
 """
 import os
+import random
+import re
 import psycopg2
 import psycopg2.extras
 from contextlib import contextmanager
+
+from app.i18n import DEFAULT_GREETINGS, default_greeting, normalize_locale
+
+_FI_TEXT = re.compile(
+    r"[äöÄÖ]|(?:^|[^A-Za-zÄÖäöÅå])(?:hei|kerro|valmentaja|tiimi|motivaatio|kuukauden|löytämään)(?:[^A-Za-zÄÖäöÅå]|$)",
+    re.I,
+)
+_SV_TEXT = re.compile(
+    r"[åÅ]|(?:^|[^A-Za-zÄÖäöÅå])(?:hej|berätta|hjälper|coachning)(?:[^A-Za-zÄÖäöÅå]|$)",
+    re.I,
+)
+
+
+def _text_matches_locale(locale: str, text: str) -> bool:
+    """Reject cross-language rows even if the locale column was mis-tagged."""
+    raw = (text or "").strip()
+    if not raw:
+        return False
+    loc = normalize_locale(locale)
+    looks_fi = bool(_FI_TEXT.search(raw))
+    looks_sv = bool(_SV_TEXT.search(raw))
+    if loc == "en":
+        return not looks_fi and not looks_sv
+    if loc == "fi":
+        # Accept Finnish or neutral ASCII; reject clear Swedish-only markers without FI.
+        return not (looks_sv and not looks_fi)
+    if loc == "sv":
+        return not (looks_fi and not looks_sv)
+    return True
 
 
 @contextmanager
@@ -107,7 +138,18 @@ def fetch_coaches_by_ids(coach_ids: list[str]) -> list[dict]:
             return list(cur.fetchall())
 
 
-def fetch_tone_guidance(situation_type: str, organization_id: str | None = None) -> dict:
+def fetch_tone_guidance(
+    situation_type: str,
+    organization_id: str | None = None,
+    locale: str | None = None,
+) -> dict:
+    """
+    Tone description plus example phrases for one mood.
+
+    Phrases are locale-scoped: an English session never receives Finnish
+    phrase rows (and vice versa). Missing locale pack → empty phrase list.
+    """
+    loc = normalize_locale(locale)
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             if organization_id:
@@ -117,10 +159,18 @@ def fetch_tone_guidance(situation_type: str, organization_id: str | None = None)
                 )
                 tone_row = cur.fetchone()
                 cur.execute(
-                    "SELECT phrase_text FROM example_phrases WHERE situation_type = %s AND is_active = true AND organization_id = %s",
-                    (situation_type, organization_id),
+                    """
+                    SELECT phrase_text FROM example_phrases
+                    WHERE situation_type = %s AND is_active = true
+                      AND organization_id = %s AND locale = %s
+                    """,
+                    (situation_type, organization_id, loc),
                 )
-                phrases = [r["phrase_text"] for r in cur.fetchall()]
+                phrases = [
+                    r["phrase_text"]
+                    for r in cur.fetchall()
+                    if _text_matches_locale(loc, r["phrase_text"])
+                ]
                 if not tone_row:
                     cur.execute(
                         "SELECT description_text FROM tone_settings WHERE name = 'default_voice' AND organization_id IS NULL"
@@ -128,20 +178,35 @@ def fetch_tone_guidance(situation_type: str, organization_id: str | None = None)
                     tone_row = cur.fetchone()
                 if not phrases:
                     cur.execute(
-                        "SELECT phrase_text FROM example_phrases WHERE situation_type = %s AND is_active = true AND organization_id IS NULL",
-                        (situation_type,),
+                        """
+                        SELECT phrase_text FROM example_phrases
+                        WHERE situation_type = %s AND is_active = true
+                          AND organization_id IS NULL AND locale = %s
+                        """,
+                        (situation_type, loc),
                     )
-                    phrases = [r["phrase_text"] for r in cur.fetchall()]
+                    phrases = [
+                        r["phrase_text"]
+                        for r in cur.fetchall()
+                        if _text_matches_locale(loc, r["phrase_text"])
+                    ]
             else:
                 cur.execute(
                     "SELECT description_text FROM tone_settings WHERE name = 'default_voice'"
                 )
                 tone_row = cur.fetchone()
                 cur.execute(
-                    "SELECT phrase_text FROM example_phrases WHERE situation_type = %s AND is_active = true",
-                    (situation_type,),
+                    """
+                    SELECT phrase_text FROM example_phrases
+                    WHERE situation_type = %s AND is_active = true AND locale = %s
+                    """,
+                    (situation_type, loc),
                 )
-                phrases = [r["phrase_text"] for r in cur.fetchall()]
+                phrases = [
+                    r["phrase_text"]
+                    for r in cur.fetchall()
+                    if _text_matches_locale(loc, r["phrase_text"])
+                ]
 
     return {
         "base_tone": tone_row["description_text"] if tone_row else "Warm and professional.",
@@ -346,10 +411,7 @@ def reset_agent_prompt(agent_name: str) -> None:
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM agent_prompts WHERE agent_name = %s", (agent_name,))
-DEFAULT_GREETING = (
-    "Hi! Tell me a bit about what you're looking for — a theme, a situation, "
-    "a team size, whatever comes to mind — and I'll help point you to the right fit."
-)
+DEFAULT_GREETING = DEFAULT_GREETINGS["en"]
 
 
 def take_message_credit(organization_id: str | None) -> bool:
@@ -432,42 +494,64 @@ def resolve_organization_id(slug: str | None) -> str | None:
         return None
 
 
-def fetch_random_greeting(organization_id: str | None = None) -> str:
+def fetch_random_greeting(
+    organization_id: str | None = None,
+    locale: str | None = None,
+) -> str:
     """
-    Picks one random active greeting for a fresh conversation. Falls back to
-    the original hardcoded default if the table is empty, has no active
-    rows, or the database is unreachable — the widget should never show
-    nothing, or an error, where a greeting is expected.
+    Picks one random active greeting for the requested locale only.
+
+    Never returns another language's greeting. Falls back to the locale pack
+    default when the table has no matching rows.
     """
+    loc = normalize_locale(locale)
+
+    def _pick(rows: list) -> str | None:
+        matched = [
+            r["greeting_text"]
+            for r in rows
+            if r.get("greeting_text") and _text_matches_locale(loc, r["greeting_text"])
+        ]
+        if not matched:
+            return None
+        return random.choice(matched)
+
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
+                rows: list = []
                 if organization_id:
                     cur.execute(
                         """
                         SELECT greeting_text FROM opening_greetings
-                        WHERE is_active = true AND organization_id = %s
-                        ORDER BY random() LIMIT 1
+                        WHERE is_active = true AND organization_id = %s AND locale = %s
                         """,
-                        (organization_id,),
+                        (organization_id, loc),
                     )
-                    row = cur.fetchone()
-                    if not row:
-                        cur.execute(
-                            """
-                            SELECT greeting_text FROM opening_greetings
-                            WHERE is_active = true AND organization_id IS NULL
-                            ORDER BY random() LIMIT 1
-                            """
-                        )
-                        row = cur.fetchone()
+                    rows = list(cur.fetchall())
+                    picked = _pick(rows)
+                    if picked:
+                        return picked
+                    cur.execute(
+                        """
+                        SELECT greeting_text FROM opening_greetings
+                        WHERE is_active = true AND organization_id IS NULL AND locale = %s
+                        """,
+                        (loc,),
+                    )
+                    rows = list(cur.fetchall())
                 else:
                     cur.execute(
-                        "SELECT greeting_text FROM opening_greetings WHERE is_active = true ORDER BY random() LIMIT 1"
+                        """
+                        SELECT greeting_text FROM opening_greetings
+                        WHERE is_active = true AND locale = %s
+                        """,
+                        (loc,),
                     )
-                    row = cur.fetchone()
-                if row and row["greeting_text"]:
-                    return row["greeting_text"]
+                    rows = list(cur.fetchall())
+                picked = _pick(rows)
+                if picked:
+                    return picked
     except Exception:
         pass
-    return DEFAULT_GREETING
+    return default_greeting(loc)

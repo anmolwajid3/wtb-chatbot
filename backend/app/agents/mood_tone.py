@@ -50,7 +50,11 @@ def run_mood_tone(state: dict) -> dict:
     mood_history.append({"turn": state.get("turn_count", 0), "mood": mood})
     state["mood_history"] = mood_history
 
-    # Fetch admin-editable tone guidance + example phrases for this mood
-    state["tone_guidance"] = fetch_tone_guidance(mood, state.get("organization_id"))
+    # Locale-scoped phrases only — never mix EN/FI packs in one session.
+    state["tone_guidance"] = fetch_tone_guidance(
+        mood,
+        state.get("organization_id"),
+        state.get("locale"),
+    )
 
     return state

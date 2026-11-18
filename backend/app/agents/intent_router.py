@@ -14,6 +14,7 @@ import re
 from pydantic import BaseModel, Field
 from app.llm import get_llm
 from app.agents.guardrail_check import visitor_advice_rule
+from app.agents.grounding import looks_like_coaching_need
 from app.db.connection import fetch_match_settings, get_agent_prompt
 
 
@@ -107,11 +108,16 @@ def _still_needs_the_agent(text: str, found_timing: str | None, slots: dict) -> 
 
 
 def _looks_like_a_situation(text: str) -> bool:
-    """A real description of a need, not a short price question."""
+    """A real coaching/work need — not a short price question or personal aside."""
     words = re.findall(r"[A-Za-z']+", text)
     if len(words) < 6:
         return False
     if re.search(r"\b(price|pricing|cost|how much|fee|fees)\b", text, re.I) and len(words) < 14:
+        return False
+    # Without a coaching/work signal, skip the local shortcut so the intake
+    # model can still mark is_off_topic (long personal asides used to slip
+    # through as theme/need and never hit the classifier).
+    if not looks_like_coaching_need(text):
         return False
     return True
 
