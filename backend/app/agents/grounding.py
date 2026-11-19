@@ -4,7 +4,7 @@ product rules, instead of relying on the model to remember long prompts.
 """
 import re
 
-from app.i18n import t
+from app.i18n import english_prose, normalize_locale, t
 
 PRICE_MARK = re.compile(r"[€$£]\s?\d|\d+\s?(eur|euros?|dollars?)\b", re.I)
 INTERNAL_SYSTEM_TALK = re.compile(
@@ -162,12 +162,79 @@ def is_dont_know(text: str) -> bool:
     return bool(_DONT_KNOW.fullmatch(raw))
 
 
+_DURATION_FI = (
+    (re.compile(r"(\d+)\s*-?\s*weeks?", re.I), r"\1 viikkoa"),
+    (re.compile(r"(\d+)\s*-?\s*months?", re.I), r"\1 kuukautta"),
+    (re.compile(r"\bweeks?\b", re.I), "viikkoa"),
+    (re.compile(r"\bmonths?\b", re.I), "kuukautta"),
+)
+_FORMAT_FI = {
+    "hybrid": "hybridi",
+    "remote": "etä",
+    "online": "etä",
+    "virtual": "etä",
+    "in person": "lähi",
+    "in-person": "lähi",
+    "onsite": "lähi",
+    "on-site": "lähi",
+}
+
+
+def _local_duration(value: str, locale: str | None) -> str:
+    text = (value or "").strip()
+    if normalize_locale(locale) != "fi" or not text:
+        return text
+    for pattern, repl in _DURATION_FI:
+        text = pattern.sub(repl, text)
+    return text
+
+
+def _local_format(value: str, locale: str | None) -> str:
+    text = (value or "").strip()
+    if normalize_locale(locale) != "fi" or not text:
+        return text
+    return _FORMAT_FI.get(text.lower(), text)
+
+
+def _description_for_visitor(text: str, locale: str | None) -> str:
+    """Keep a stored blurb only when it is already in the visitor's language."""
+    cleaned = strip_empty_template_tokens(text or "")
+    if not cleaned:
+        return ""
+    if normalize_locale(locale) == "fi" and english_prose(cleaned):
+        return ""
+    if normalize_locale(locale) == "fi" and re.search(
+        r"\b(a|an|the|with|structured|week|weeks|program|for|and)\b",
+        cleaned,
+        re.I,
+    ):
+        return ""
+    return cleaned
+
+
+def visitor_blurb(coach: dict, locale: str | None) -> str:
+    """Program sentence in the session language, using only fields on the row."""
+    desc = _description_for_visitor(coach.get("short_description") or "", locale)
+    if desc:
+        return desc
+    parts: list[str] = []
+    duration = _local_duration(str(coach.get("duration") or ""), locale)
+    delivery = _local_format(str(coach.get("delivery_format") or ""), locale)
+    if duration and not english_prose(duration):
+        parts.append(t(locale, "match_duration", duration=duration).rstrip("."))
+    if delivery and not english_prose(delivery):
+        parts.append(t(locale, "match_format", delivery=delivery).rstrip("."))
+    if parts:
+        return ". ".join(parts) + "."
+    return t(locale, "match_blurb_fallback")
+
+
 def compose_match_reply(
     coaches: list[dict],
     slots: dict | None = None,
     locale: str | None = None,
 ) -> str:
-    """Build a match reply only from verified coach rows."""
+    """Build a match reply only from verified coach rows, in the session language."""
     slots = slots or {}
     theme = (slots.get("theme") or "").strip()
     if theme and len(theme) <= 80 and theme.lower() not in {"unspecified", "not specified"}:
@@ -181,8 +248,8 @@ def compose_match_reply(
         program = (coach.get("program_name") or "").strip()
         if not name or not program:
             continue
-        desc = strip_empty_template_tokens(coach.get("short_description") or "")
-        line = f"**{program}** with **{name}**"
+        line = t(locale, "match_program_line", program=program, name=name)
+        desc = visitor_blurb(coach, locale)
         if desc:
             line = f"{line} — {desc}"
         score = coach.get("match_score")

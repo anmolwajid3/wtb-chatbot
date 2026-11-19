@@ -23,6 +23,7 @@ export async function sendProfileNotice(formData: FormData) {
     [organization.id, title, body]
   );
   revalidatePath("/messages");
+  revalidatePath("/broadcasts");
 }
 
 export async function deleteProfileNotice(formData: FormData) {
@@ -31,4 +32,5 @@ export async function deleteProfileNotice(formData: FormData) {
   if (!id) return;
   await getPool().query(`DELETE FROM notices WHERE id = $1 AND organization_id = $2`, [id, organization.id]);
   revalidatePath("/messages");
+  revalidatePath("/broadcasts");
 }

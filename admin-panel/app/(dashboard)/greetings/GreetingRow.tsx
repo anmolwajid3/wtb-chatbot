@@ -57,7 +57,7 @@ export default function GreetingRow({
         <button
           onClick={() => toggleGreeting(greeting.id, greeting.is_active)}
           className={`text-xs px-3 py-1 rounded-full whitespace-nowrap ${
-            greeting.is_active ? "bg-green-900/40 text-green-400" : "bg-neutral-800 text-neutral-500"
+            greeting.is_active ? "status-pill-active" : "bg-neutral-800 text-neutral-500"
           }`}
         >
           {greeting.is_active ? "Active" : "Inactive"}

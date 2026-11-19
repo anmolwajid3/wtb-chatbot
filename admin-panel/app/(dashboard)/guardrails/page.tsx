@@ -1,3 +1,4 @@
+import { Breadcrumbs } from "../../components/Breadcrumbs";
 import { getPool } from "@/lib/db";
 import { assertStaff, canEditCompany } from "@/lib/plans";
 import { getWorkspace, requireOrganization } from "@/lib/workspace";
@@ -20,7 +21,13 @@ async function getGuardrails(organizationId: string | null): Promise<Guardrail[]
     : await pool.query(
         `SELECT * FROM guardrails WHERE organization_id IS NULL ORDER BY category, rule_text`
       );
-  return result.rows;
+  const seen = new Set<string>();
+  return result.rows.filter((row: Guardrail) => {
+    const key = row.rule_text.trim().toLowerCase().replace(/\s+/g, " ");
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 async function addGuardrail(rule_text: string, category: string) {
@@ -71,6 +78,13 @@ export default async function GuardrailsPage() {
 
   return (
     <div className="max-w-5xl mx-auto p-8">
+      <Breadcrumbs
+        items={[
+          { href: "/home", label: "Home" },
+          { href: "/chatbot", label: "Chatbot" },
+          { label: "Guardrails" },
+        ]}
+      />
       <div className="flex items-center justify-between mb-2">
         <h1 className="font-display text-2xl font-semibold text-amber-400 uppercase tracking-wide">
           Guardrails

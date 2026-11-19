@@ -32,8 +32,15 @@ def classify_mood(text: str) -> str:
     negative = (
         "disconnect", "low-energy", "low energy", "stress", "frustrat", "exhaust",
         "anxious", "burnout", "stuck", "struggl", "unhappy", "tired", "demotivat", "conflict",
+        # Finnish
+        "demotivoitunut", "uupunut", "väsynyt", "kuormittunut", "turhautunut",
+        "matala energia", "ei jaksa", "burnout", "ahdistun",
     )
-    positive = ("excited", "great", "happy", "wonderful", "eager", "thrilled", "love this")
+    positive = (
+        "excited", "great", "happy", "wonderful", "eager", "thrilled", "love this",
+        # Finnish
+        "innostunut", "ihana", "mahtava", "super", "odotan innolla", "innoissaan",
+    )
     if any(word in lowered for word in negative):
         return "negative"
     if any(word in lowered for word in positive):

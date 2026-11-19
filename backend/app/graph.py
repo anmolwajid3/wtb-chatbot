@@ -31,11 +31,20 @@ from app.agents.intent_router import run_intent_router
 from app.agents.mood_tone import run_mood_tone
 from app.agents.coach_matcher import run_coach_matcher
 from app.agents.formatter import run_formatter
-from app.agents.guardrail_check import run_guardrail_check
+from app.agents.guardrail_check import is_advice_request, run_guardrail_check
+from app.agents.grounding import (
+    compose_match_reply,
+    scrub_profile,
+    strip_empty_template_tokens,
+    visitor_blurb,
+)
 from app.agents.response_reviewer import run_response_reviewer
 from app.agents.summarizer import run_summarizer
-from app.db.connection import save_conversation_state, fetch_coaches_by_ids
-from app.agents.grounding import scrub_profile, strip_empty_template_tokens
+from app.db.connection import (
+    fetch_coaches_by_ids,
+    load_conversation_session,
+    save_conversation_state,
+)
 from app.i18n import normalize_locale, reply_language_ok, resolve_locale, t
 
 
@@ -203,7 +212,7 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
     stops a tampered request from claiming a selection of some other coach
     ID that was never actually presented to this visitor.
     """
-    state = _conversations_in_memory.get(conversation_id)
+    state = _remember(conversation_id)
     if state is None:
         reply = t(None, "conversation_expired")
         return {
@@ -267,6 +276,7 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
         matched_coach_ids=state["matched_coaches"],
         mood_history=state.get("mood_history", []),
         organization_id=state.get("organization_id"),
+        session=_session_payload(state),
     )
 
     return {
@@ -280,7 +290,7 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
 
 
 _PRICE_ASK = re.compile(
-    r"\b(price|pricing|cost|how much|fee|fees|charg\w*|hinta|hinnoittelu|maksaa|kustannus|pris|kostar|kostnad)\b",
+    r"\b(price|pricing|cost|how much|fee|fees|charg\w*|hinta|hinnoittelu|maksa\w*|kustannus|paljonko|pris|kostar|kostnad)\b",
     re.I,
 )
 _EMAIL = re.compile(r"[\w.+-]+@[\w.-]+\.\w+")
@@ -318,7 +328,37 @@ _SKIP_OPTIONAL = re.compile(
 
 
 def _locale(state: dict) -> str:
-    return normalize_locale(state.get("locale"))
+    # `locale` is the session language. `reply_locale` is the older key.
+    return normalize_locale(state.get("locale") or state.get("reply_locale"))
+
+
+def _session_payload(state: dict) -> dict:
+    """Fields a later turn needs after this process forgets the conversation."""
+    return {
+        "locale": _locale(state),
+        "coach_selected": bool(state.get("coach_selected")),
+        "matched_coaches": [str(item) for item in (state.get("matched_coaches") or [])],
+        "matched_coach_scores": state.get("matched_coach_scores") or {},
+        "gathered_slots": state.get("gathered_slots") or {},
+        "turn_count": state.get("turn_count") or 0,
+        "detected_mood": state.get("detected_mood") or "neutral",
+        "post_selection_turns": state.get("post_selection_turns") or 0,
+        "awaiting_optional_details": bool(state.get("awaiting_optional_details")),
+        "handoff_complete": bool(state.get("handoff_complete")),
+        "session_closed": bool(state.get("session_closed")),
+        "organization_id": state.get("organization_id"),
+        "outcome": state.get("outcome") or "in_progress",
+    }
+
+
+def _remember(conversation_id: str) -> dict | None:
+    state = _conversations_in_memory.get(conversation_id)
+    if state is not None:
+        return state
+    restored = load_conversation_session(conversation_id)
+    if restored:
+        _conversations_in_memory[conversation_id] = restored
+    return restored
 
 
 def _join_phrases(locale: str, items: list[str]) -> str:
@@ -542,13 +582,15 @@ def _is_closing_ack(message: str) -> bool:
 
 def _post_handoff_reply(state: dict, message: str) -> tuple[str, str]:
     """
-    After quote handoff: one short goodbye on ok/bye, then silence.
-    Never reopen lead capture or repeat the long "you're all set" loop.
+    After quote handoff, keep answering. A goodbye is short. A medical or
+    legal ask is refused. The chat does not go silent.
     """
-    if state.get("session_closed"):
-        return "", "silent"
-
     locale = _locale(state)
+    if is_advice_request(message):
+        return t(locale, "refuse_medical_legal"), "stay"
+    if state.get("session_closed") or _is_closing_ack(message):
+        return t(locale, "post_handoff_goodbye"), "farewell"
+
     coach = _selected_coach(state)
     name = coach.get("coach_name") or t(locale, "fallback_coach")
     program = coach.get("program_name") or t(locale, "fallback_program")
@@ -563,9 +605,6 @@ def _post_handoff_reply(state: dict, message: str) -> tuple[str, str]:
             program=program,
             contact_bit=contact_bit,
         ), "stay"
-
-    if _is_closing_ack(message):
-        return t(locale, "post_handoff_goodbye"), "farewell"
 
     note = " ".join(message.split())
     if len(note) > 160:
@@ -601,7 +640,11 @@ def _handle_post_selection_message(conversation_id: str, message: str) -> dict:
     state = _conversations_in_memory[conversation_id]
     state["messages"].append({"role": "user", "content": message})
 
-    if state.get("handoff_complete"):
+    if is_advice_request(message):
+        reply, mode = t(_locale(state), "refuse_medical_legal"), "stay"
+    elif _BYE.fullmatch((message or "").strip()):
+        reply, mode = t(_locale(state), "post_handoff_goodbye"), "farewell"
+    elif state.get("handoff_complete"):
         reply, mode = _post_handoff_reply(state, message)
     elif _PRICE_ASK.search(message) or _EMAIL.search(message) or not state.get("awaiting_optional_details"):
         reply, mode = _selection_reply(state, message)
@@ -619,6 +662,8 @@ def _handle_post_selection_message(conversation_id: str, message: str) -> dict:
         state["handoff_complete"] = True
 
     reply = strip_empty_template_tokens(reply) if reply else reply
+    if not (reply or "").strip():
+        reply = t(_locale(state), "post_handoff_goodbye")
     if reply:
         state["messages"].append({"role": "assistant", "content": reply})
     state["final_reply"] = reply
@@ -631,6 +676,7 @@ def _handle_post_selection_message(conversation_id: str, message: str) -> dict:
         matched_coach_ids=state.get("matched_coaches", []),
         mood_history=state.get("mood_history", []),
         organization_id=state.get("organization_id"),
+        session=_session_payload(state),
     )
 
     return {
@@ -655,15 +701,11 @@ def run_turn(
     record: bool = True,
     locale: str | None = None,
 ) -> dict:
-    existing = (
-        _conversations_in_memory.get(conversation_id)
-        if conversation_id
-        else None
-    )
+    existing = _remember(conversation_id) if conversation_id else None
     # URL/session locale, unless the visitor writes Finnish — then stay Finnish.
     locale = resolve_locale(
         requested=locale,
-        session_locale=(existing or {}).get("locale"),
+        session_locale=_locale(existing) if existing else None,
         message=message,
     )
 
@@ -677,13 +719,13 @@ def run_turn(
                 "coach_matches": [],
                 **_empty_debug_fields(),
             }
-        if conversation_id in _conversations_in_memory:
-            _conversations_in_memory[conversation_id]["locale"] = locale
+        if existing:
+            existing["locale"] = locale
         return _handle_coach_selection(conversation_id, selected_coach_id)
 
-    if conversation_id and conversation_id in _conversations_in_memory:
-        _conversations_in_memory[conversation_id]["locale"] = locale
-        if _conversations_in_memory[conversation_id].get("coach_selected"):
+    if existing:
+        existing["locale"] = locale
+        if existing.get("coach_selected"):
             return _handle_post_selection_message(conversation_id, message)
 
     if conversation_id is None or conversation_id not in _conversations_in_memory:
@@ -734,10 +776,16 @@ def run_turn(
     result_state["locale"] = locale or result_state.get("locale") or "en"
 
     result_state["final_reply"] = strip_empty_template_tokens(result_state.get("final_reply") or "")
-    if result_state["final_reply"] and not reply_language_ok(
-        result_state["final_reply"], result_state.get("locale")
-    ):
-        result_state["final_reply"] = t(result_state.get("locale"), "intake_move_on")
+    locale_now = result_state.get("locale")
+    if result_state["final_reply"] and not reply_language_ok(result_state["final_reply"], locale_now):
+        matched_ids = result_state.get("matched_coaches") or []
+        coaches = [scrub_profile(row) for row in fetch_coaches_by_ids(matched_ids)] if matched_ids else []
+        rebuilt = compose_match_reply(coaches, result_state.get("gathered_slots"), locale_now) if coaches else ""
+        result_state["final_reply"] = rebuilt if rebuilt and reply_language_ok(rebuilt, locale_now) else t(
+            locale_now, "intake_move_on"
+        )
+    if not (result_state.get("final_reply") or "").strip():
+        result_state["final_reply"] = t(locale_now, "intake_move_on")
     if result_state["final_reply"]:
         result_state["messages"].append({"role": "assistant", "content": result_state["final_reply"]})
     _conversations_in_memory[conversation_id] = result_state
@@ -752,6 +800,7 @@ def run_turn(
             matched_coach_ids=result_state.get("matched_coaches", []),
             mood_history=result_state.get("mood_history", []),
             organization_id=result_state.get("organization_id"),
+            session=_session_payload(result_state),
         )
 
     # Build structured coach match data for the widget's confidence visualization
@@ -767,12 +816,13 @@ def run_turn(
             c = scrub_profile(raw)
             coach_id = str(c.get("id"))
             image_urls = c.get("image_urls") or []
+            blurb = visitor_blurb(c, result_state.get("locale"))
             coach_matches.append({
                 "coach_id": coach_id,
                 "coach_name": c.get("coach_name"),
                 "program_name": c.get("program_name"),
-                "short_description": c.get("short_description"),
-                "long_description": c.get("long_description"),
+                "short_description": blurb,
+                "long_description": blurb,
                 "target_group": c.get("target_group"),
                 "delivery_format": c.get("delivery_format"),
                 "duration": c.get("duration"),

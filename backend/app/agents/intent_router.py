@@ -71,7 +71,11 @@ def _clean_message(text: str) -> str:
 
 
 def _price_question_text(text: str) -> bool:
-    return bool(re.search(r"\b(price|pricing|cost|how much|fee|fees)\b", text, re.I))
+    return bool(re.search(
+        r"\b(price|pricing|cost|how much|fee|fees|hinta|hinnoittelu|maksa\w*|kustannus|paljonko)\b",
+        text,
+        re.I,
+    ))
 
 
 def _timing_phrase(text: str) -> str | None:
@@ -83,7 +87,7 @@ def _timing_phrase(text: str) -> str | None:
         r"\b(?:no rush|no urgent deadline|soon)\b",
         r"\b(?:tammikuussa|helmikuussa|maaliskuussa|huhtikuussa|toukokuussa|"
         r"kesäkuussa|heinäkuussa|elokuussa|syyskuussa|lokakuussa|marraskuussa|joulukuussa)\b",
-        r"\b(?:ensi kuussa|ensi vuonna|tänä vuonna|kuukauden kuluessa|mahdollisimman pian)\b",
+        r"\b(?:ensi kuussa|ensi vuonna|tänä vuonna|kuukauden kuluessa|kuukauden päästä|mahdollisimman pian)\b",
         r"\b(?:nästa månad|den här månaden|inom en månad|så snart som möjligt)\b",
     )
     for pattern in patterns:
@@ -95,7 +99,7 @@ def _timing_phrase(text: str) -> str | None:
 
 def _group_size(text: str) -> int | None:
     match = re.search(
-        r"\b(?:about|around|roughly|approximately)?\s*(\d{1,4})\s*(?:people|persons|person|members)\b",
+        r"\b(?:about|around|roughly|approximately|noin)?\s*(\d{1,4})\s*(?:people|persons|person|members|henkilöä|henkeä|hlöä)\b",
         text,
         re.I,
     )

@@ -70,7 +70,7 @@ def test_url_lang_locks_session_and_finnish_writing_sticks():
     assert resolve_locale(requested="en", session_locale="fi", message="ok") == "fi"
     assert resolve_locale(requested="en", session_locale="fi", message="En ymmärtänyt") == "fi"
     assert resolve_locale(requested="fi", session_locale=None) == "fi"
-    assert resolve_locale(requested=None, session_locale="sv") == "sv"
+    assert resolve_locale(requested=None, session_locale="sv") == "en"
     assert resolve_locale(requested="en", session_locale="en", message="next month") == "en"
 
 

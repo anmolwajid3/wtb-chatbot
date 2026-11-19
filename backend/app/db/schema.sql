@@ -119,11 +119,16 @@ INSERT INTO tone_settings (name, description_text)
 VALUES ('default_voice', 'Warm, professional, empathetic coaching-industry tone. Reflects a consultative, human style — never robotic, never pushy.')
 ON CONFLICT (name) DO NOTHING;
 
-INSERT INTO guardrails (rule_text, category) VALUES
-('Never state, estimate, or imply a specific price or price range to the customer.', 'pricing'),
-('Never give medical or legal advice.', 'medical-legal'),
-('Never mention, describe, or imply the existence of a person, service, or credential that is not present in the verified profile data provided for this conversation.', 'fabrication')
-ON CONFLICT DO NOTHING;
+INSERT INTO guardrails (rule_text, category)
+SELECT v.rule_text, v.category
+FROM (VALUES
+  ('Never state, estimate, or imply a specific price or price range to the customer.', 'pricing'),
+  ('Never give medical or legal advice.', 'medical-legal'),
+  ('Never mention, describe, or imply the existence of a person, service, or credential that is not present in the verified profile data provided for this conversation.', 'fabrication')
+) AS v(rule_text, category)
+WHERE NOT EXISTS (
+  SELECT 1 FROM guardrails g WHERE lower(btrim(g.category)) = lower(v.category)
+);
 
 -- Companies, people, and configurable profile fields.
 -- Safe to re-run on an existing database.
@@ -165,6 +170,12 @@ ALTER TABLE tone_settings ADD COLUMN IF NOT EXISTS organization_id UUID REFERENC
 ALTER TABLE example_phrases ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
 ALTER TABLE guardrails ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS reply_language TEXT NOT NULL DEFAULT 'auto';
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS widget_theme TEXT NOT NULL DEFAULT 'dark';
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS widget_accent TEXT NOT NULL DEFAULT '#FFFFFF';
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS review_tag TEXT;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS session_json JSONB;
+ALTER TABLE profile_fields ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
 
 CREATE TABLE IF NOT EXISTS opening_greetings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

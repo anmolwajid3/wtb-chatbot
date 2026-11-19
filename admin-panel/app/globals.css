@@ -48,6 +48,66 @@ html.dark body {
   color: #F4F7F2;
 }
 
+.header-bar {
+  background: #1C2820;
+  border-bottom: 1px solid #314033;
+  color: #F4F7F2;
+}
+
+/* Company accent in coach portal (overrides amber utilities). */
+.coach-portal {
+  --brand-accent: #f59e0b;
+}
+.coach-portal .bg-amber-500,
+.coach-portal .hover\:bg-amber-400:hover {
+  background-color: var(--brand-accent) !important;
+  color: #101610 !important;
+}
+.coach-portal .text-amber-400,
+.coach-portal .hover\:text-amber-400:hover {
+  color: var(--brand-accent) !important;
+}
+.coach-portal .border-amber-500,
+.coach-portal .hover\:border-amber-500:hover,
+.coach-portal .focus\:border-amber-500:focus {
+  border-color: var(--brand-accent) !important;
+}
+
+html.light .header-bar {
+  background: #F4F7F2 !important;
+  border-bottom: 1px solid #C9D4C4 !important;
+  color: #122018 !important;
+  box-shadow: 0 1px 2px rgba(18, 32, 24, 0.08);
+}
+
+html.light .header-bar .text-neutral-200,
+html.light .header-bar .text-neutral-300,
+html.light .header-bar .text-neutral-400 {
+  color: #3D4A3A !important;
+}
+
+html.light .header-bar .border-neutral-700 {
+  border-color: #C9D4C4 !important;
+}
+
+html.light .header-bar .bg-neutral-800 {
+  background-color: #FFFFFF !important;
+}
+
+html.light .header-bar .hover\:bg-neutral-800:hover {
+  background-color: #E8EFE4 !important;
+}
+
+html.light .header-bar .bg-amber-500 {
+  background-color: #0E1C12 !important;
+  color: #FFFFFF !important;
+}
+
+html.light .header-bar button[aria-pressed="true"] {
+  background-color: #0E1C12 !important;
+  color: #FFFFFF !important;
+}
+
 html.dark .bg-black { background-color: #101610 !important; }
 html.dark .bg-neutral-900 { background-color: #1C2820 !important; }
 html.dark .bg-neutral-800 { background-color: #243028 !important; }
@@ -100,6 +160,17 @@ html.dark .aside-shell .hover\:text-amber-400:hover { color: #FFFFFF !important;
 html.light .aside-shell .hover\:bg-neutral-900:hover,
 html.dark .aside-shell .hover\:bg-neutral-900:hover { background-color: #16301C !important; }
 
+/* Selected nav item stays light text on a dark chip in both themes.
+   html.light .bg-neutral-900 paints the chip white, which hid the label. */
+.nav-link-active,
+html.light .aside-shell .nav-link-active,
+html.dark .aside-shell .nav-link-active,
+html.light .nav-link-active,
+html.dark .nav-link-active {
+  background-color: #16301C !important;
+  color: #FFFFFF !important;
+}
+
 input,
 textarea,
 select {
@@ -143,6 +214,14 @@ html.dark select:-webkit-autofill {
   font-weight: 600;
   letter-spacing: 0.01em;
   text-transform: capitalize;
+}
+.status-pill-active {
+  background: #0E1C12 !important;
+  color: #FFFFFF !important;
+}
+html.dark .status-pill-active {
+  background: #E7F6EA !important;
+  color: #0E1C12 !important;
 }
 .tag-active, html.light .tag-active,
 .tag-matched, html.light .tag-matched { background: #0E1C12 !important; color: #FFFFFF !important; }

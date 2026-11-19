@@ -77,7 +77,7 @@ export default function GuardrailRow({
           onClick={handleToggle}
           disabled={togglingStatus}
           className={`text-xs px-3 py-1 rounded-full whitespace-nowrap disabled:opacity-50 ${
-            guardrail.is_active ? "bg-green-900/40 text-green-400" : "bg-neutral-800 text-neutral-500"
+            guardrail.is_active ? "status-pill-active" : "bg-neutral-800 text-neutral-500"
           }`}
         >
           {guardrail.is_active ? "Active" : "Inactive"}

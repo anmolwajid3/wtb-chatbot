@@ -62,18 +62,8 @@ WHERE NOT EXISTS (
   WHERE g.organization_id IS NULL AND g.locale = 'fi' AND g.greeting_text = v.greeting_text
 );
 
--- Global SV greetings (optional third pack)
-INSERT INTO opening_greetings (greeting_text, is_active, organization_id, locale)
-SELECT v.greeting_text, true, NULL, 'sv'
-FROM (
-  VALUES
-    ('Hej! Berätta lite om vad du letar efter — ett tema, en situation, en gruppstorlek — så hjälper jag dig att hitta rätt.'),
-    ('Välkommen. Beskriv kort utmaningen eller målet, så hjälper jag dig hitta en bra match.')
-) AS v(greeting_text)
-WHERE NOT EXISTS (
-  SELECT 1 FROM opening_greetings g
-  WHERE g.organization_id IS NULL AND g.locale = 'sv' AND g.greeting_text = v.greeting_text
-);
+-- Swedish is no longer a visitor language.
+UPDATE opening_greetings SET is_active = false WHERE locale = 'sv';
 
 -- EN example phrases
 INSERT INTO example_phrases (situation_type, phrase_text, is_active, organization_id, locale)
@@ -111,20 +101,7 @@ WHERE NOT EXISTS (
     AND p.situation_type = v.situation_type AND p.phrase_text = v.phrase_text
 );
 
--- SV example phrases
-INSERT INTO example_phrases (situation_type, phrase_text, is_active, organization_id, locale)
-SELECT v.situation_type, v.phrase_text, true, NULL, 'sv'
-FROM (
-  VALUES
-    ('positive', 'Det låter spännande — jag hjälper gärna till att hitta en bra match.'),
-    ('negative', 'Jag förstår att det känts tungt. Vi tar det steg för steg.'),
-    ('neutral', 'Uppfattat. Några detaljer till hjälper mig peka rätt.')
-) AS v(situation_type, phrase_text)
-WHERE NOT EXISTS (
-  SELECT 1 FROM example_phrases p
-  WHERE p.organization_id IS NULL AND p.locale = 'sv'
-    AND p.situation_type = v.situation_type AND p.phrase_text = v.phrase_text
-);
+UPDATE example_phrases SET is_active = false WHERE locale = 'sv';
 
 COMMIT;
 
