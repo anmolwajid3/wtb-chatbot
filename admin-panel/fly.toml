@@ -1,0 +1,21 @@
+# Opas admin panel — deploy from the admin-panel/ folder:
+#   cd admin-panel && fly launch --copy-config --name opas-admin
+#   fly secrets set DATABASE_URL=... SESSION_SECRET=... SUPER_ADMIN_EMAIL=... SUPER_ADMIN_PASSWORD=...
+#   fly deploy
+
+app = "opas-admin"
+primary_region = "ams"
+
+[build]
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

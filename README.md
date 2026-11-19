@@ -163,8 +163,8 @@ cd admin-panel && npm run dev
 - The in-memory conversation store in `graph.py` (`_conversations_in_memory`)
   is fine for a single-instance pilot but won't survive a server restart —
   acceptable for now, flag if this needs to be more durable
-- No real deployment/hosting config yet (Fly.io/Render/etc. — pick one and
-  add a Dockerfile or platform config)
+- Fly.io deploy configs are in each app folder (`Dockerfile` + `fly.toml`).
+  Follow **[DEPLOY.md](DEPLOY.md)** for a first-time production deploy.
 
 ---
 

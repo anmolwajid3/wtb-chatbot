@@ -1,13 +1,23 @@
 import { getPool } from "@/lib/db";
+import { getLocale } from "@/lib/i18n";
 import { requireCoachSession } from "@/lib/coachSessionServer";
 
 export const dynamic = "force-dynamic";
 
 export default async function CoachMessagesPage() {
   const session = await requireCoachSession();
+  const locale = await getLocale();
+  const fi = locale === "fi";
   const pool = getPool();
-  const coach = await pool.query(`SELECT organization_id FROM coaches WHERE id = $1`, [session.coachId]);
+  const coach = await pool.query(
+    `SELECT c.organization_id, o.name
+     FROM coaches c
+     LEFT JOIN organizations o ON o.id = c.organization_id
+     WHERE c.id = $1`,
+    [session.coachId]
+  );
   const organizationId = coach.rows[0]?.organization_id;
+  const companyName = coach.rows[0]?.name || "";
   const notices = await pool.query(
     `SELECT id, title, body, created_at FROM notices
      WHERE audience IN ('profiles', 'both')
@@ -18,9 +28,15 @@ export default async function CoachMessagesPage() {
 
   return (
     <div className="max-w-2xl mx-auto p-8">
-      <h1 className="font-display text-3xl text-neutral-100 mb-2">Messages</h1>
-      <p className="text-neutral-400 mb-6">Notes from your company and from Opas. They are for you to read.</p>
-      {notices.rows.length === 0 && <p className="text-sm text-neutral-500">No messages yet.</p>}
+      <h1 className="font-display text-3xl text-neutral-100 mb-2">{fi ? "Ilmoitukset" : "Messages"}</h1>
+      <p className="text-neutral-400 mb-6">
+        {fi
+          ? `Viestit yritykseltä${companyName ? ` ${companyName}` : ""}.`
+          : `Notes from your company${companyName ? ` (${companyName})` : ""}.`}
+      </p>
+      {notices.rows.length === 0 && (
+        <p className="text-sm text-neutral-500">{fi ? "Ei viestejä vielä." : "No messages yet."}</p>
+      )}
       <ul className="grid gap-3">
         {notices.rows.map((notice) => (
           <li key={notice.id} className="bg-neutral-900 border border-neutral-800 rounded-lg p-4">

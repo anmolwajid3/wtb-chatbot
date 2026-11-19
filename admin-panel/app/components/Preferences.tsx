@@ -5,9 +5,8 @@ import { LOCALE_COOKIE, THEME_COOKIE } from "@/lib/brand";
 import type { Locale } from "@/lib/i18n";
 
 const LOCALES: { id: Locale; label: string }[] = [
-  { id: "en", label: "EN" },
-  { id: "sv", label: "SV" },
   { id: "fi", label: "FI" },
+  { id: "en", label: "EN" },
 ];
 
 export function Preferences({

@@ -10,7 +10,11 @@ export default function CoachAccountManager({
 }: {
   coachId: string;
   existingUsername: string | null;
-  setCredentials: (coachId: string, username: string, password: string) => Promise<{ error?: string }>;
+  setCredentials: (
+    coachId: string,
+    username: string,
+    password: string
+  ) => Promise<{ error?: string }>;
 }) {
   const router = useRouter();
   const [username, setUsername] = useState(existingUsername || "");

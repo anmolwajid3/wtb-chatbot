@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 
 async function requireOrgId() {
   const workspace = await assertStaff(canAnalyze);
+  if (!workspace) return null;
   return workspace.organization?.id ?? null;
 }
 

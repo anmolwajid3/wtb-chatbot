@@ -1,6 +1,7 @@
+import { Breadcrumbs } from "../../../components/Breadcrumbs";
 import { getPool } from "@/lib/db";
+import { getLocale } from "@/lib/i18n";
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import { getWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +12,7 @@ type MoodEntry = { turn: number; mood: string };
 async function getConversation(id: string, organizationId: string) {
   const pool = getPool();
   const result = await pool.query(
-    `SELECT id, started_at, transcript_json, outcome, matched_coach_ids, mood_history
+    `SELECT id, started_at, transcript_json, outcome, matched_coach_ids, mood_history, review_tag
      FROM conversations WHERE id = $1 AND organization_id = $2`,
     [id, organizationId]
   );
@@ -49,7 +50,66 @@ type StructuredSummary = {
   next_step?: string;
 };
 
-function renderQuoteSummary(summaryText: string) {
+function copyFor(locale: string) {
+  if (locale === "en") {
+    return {
+      home: "Home",
+      conversations: "Conversations",
+      detail: "Detail",
+      title: "Conversation",
+      started: "Started",
+      matched: "Matched coaches",
+      quote: "Quote request",
+      purchase: "Purchase order brief",
+      keyDetails: "Key details",
+      stillConfirm: "Still to confirm",
+      nextStep: "Next step",
+      contact: "Contact",
+      notProvided: "not provided",
+      transcript: "Transcript",
+      emptyTranscript: "No transcript recorded.",
+      mood: "mood",
+      moodHistory: "Mood history",
+      turn: "Turn",
+      tag: "Tag",
+    };
+  }
+  return {
+    home: "Koti",
+    conversations: "Keskustelut",
+    detail: "Tiedot",
+    title: "Keskustelu",
+    started: "Aloitettu",
+    matched: "Ehdotetut valmentajat",
+    quote: "Tarjouspyyntö",
+    purchase: "Ostotilauksen yhteenveto",
+    keyDetails: "Keskeiset tiedot",
+    stillConfirm: "Vielä varmistettava",
+    nextStep: "Seuraava askel",
+    contact: "Yhteystieto",
+    notProvided: "ei annettu",
+    transcript: "Keskustelu",
+    emptyTranscript: "Ei tallennettua keskustelua.",
+    mood: "tunnelma",
+    moodHistory: "Tunnelmahistoria",
+    turn: "Vuoro",
+    tag: "Tagi",
+  };
+}
+
+function outcomeLabel(outcome: string, locale: string) {
+  const mapFi: Record<string, string> = {
+    matched: "yhdistetty",
+    purchase_order: "ostotilaus",
+    in_progress: "kesken",
+    spam: "roskaposti",
+    abandoned: "keskeytetty",
+  };
+  if (locale === "en") return outcome.replace(/_/g, " ");
+  return mapFi[outcome] || outcome.replace(/_/g, " ");
+}
+
+function renderQuoteSummary(summaryText: string, labels: ReturnType<typeof copyFor>) {
   try {
     const parsed: StructuredSummary = JSON.parse(summaryText);
     if (parsed && typeof parsed === "object" && parsed.need_summary) {
@@ -59,7 +119,7 @@ function renderQuoteSummary(summaryText: string) {
 
           {parsed.key_details && parsed.key_details.length > 0 && (
             <div>
-              <p className="text-xs uppercase tracking-wide text-neutral-500 mb-1">Key details</p>
+              <p className="text-xs uppercase tracking-wide text-neutral-500 mb-1">{labels.keyDetails}</p>
               <ul className="text-sm text-neutral-300 list-disc list-inside space-y-0.5">
                 {parsed.key_details.map((d, i) => (
                   <li key={i}>{d}</li>
@@ -70,7 +130,7 @@ function renderQuoteSummary(summaryText: string) {
 
           {parsed.open_questions && parsed.open_questions.length > 0 && (
             <div>
-              <p className="text-xs uppercase tracking-wide text-amber-500 mb-1">Still to confirm</p>
+              <p className="text-xs uppercase tracking-wide text-amber-500 mb-1">{labels.stillConfirm}</p>
               <ul className="text-sm text-neutral-300 list-disc list-inside space-y-0.5">
                 {parsed.open_questions.map((q, i) => (
                   <li key={i}>{q}</li>
@@ -81,7 +141,7 @@ function renderQuoteSummary(summaryText: string) {
 
           {parsed.next_step && (
             <div>
-              <p className="text-xs uppercase tracking-wide text-neutral-500 mb-1">Next step</p>
+              <p className="text-xs uppercase tracking-wide text-neutral-500 mb-1">{labels.nextStep}</p>
               <p className="text-sm text-neutral-100 font-medium">{parsed.next_step}</p>
             </div>
           )}
@@ -89,7 +149,7 @@ function renderQuoteSummary(summaryText: string) {
       );
     }
   } catch {
-    // not JSON — fall through to plain-text rendering below
+    // not JSON — fall through
   }
   return <p className="text-sm text-neutral-300 whitespace-pre-wrap">{summaryText}</p>;
 }
@@ -98,6 +158,8 @@ export default async function ConversationDetailPage({ params }: { params: Promi
   const { id } = await params;
   const workspace = await getWorkspace();
   if (!workspace?.organization) return notFound();
+  const locale = await getLocale();
+  const labels = copyFor(locale);
   const conversation = await getConversation(id, workspace.organization.id);
   if (!conversation) return notFound();
 
@@ -105,28 +167,38 @@ export default async function ConversationDetailPage({ params }: { params: Promi
   const quoteRequest = await getQuoteRequest(id);
   const transcript: TranscriptMessage[] = conversation.transcript_json || [];
   const moodHistory: MoodEntry[] = conversation.mood_history || [];
+  const dateLocale = locale === "fi" ? "fi-FI" : "en-GB";
 
   return (
     <div className="max-w-4xl mx-auto p-8">
-      <Link href="/logs" className="text-sm text-neutral-500 hover:text-amber-400 mb-4 inline-block">
-        ← Back to logs
-      </Link>
+      <Breadcrumbs
+        items={[
+          { href: "/home", label: labels.home },
+          { href: "/logs", label: labels.conversations },
+          { label: labels.detail },
+        ]}
+      />
 
-      <div className="flex items-center gap-3 mb-2">
+      <div className="flex flex-wrap items-center gap-3 mb-2">
         <h1 className="font-display text-2xl font-semibold text-amber-400 uppercase tracking-wide">
-          Conversation
+          {labels.title}
         </h1>
         <span className={outcomeTag(conversation.outcome)}>
-          {conversation.outcome.replace(/_/g, " ")}
+          {outcomeLabel(conversation.outcome, locale)}
         </span>
+        {conversation.review_tag && (
+          <span className="tag tag-muted">
+            {labels.tag}: {String(conversation.review_tag).replace(/_/g, " ")}
+          </span>
+        )}
       </div>
       <p className="text-sm text-neutral-500 mb-6">
-        Started {new Date(conversation.started_at).toLocaleString("en-GB")} · ID: {conversation.id}
+        {labels.started} {new Date(conversation.started_at).toLocaleString(dateLocale)} · ID: {conversation.id}
       </p>
 
       {coaches.length > 0 && (
         <div className="bg-neutral-900 rounded-lg border border-neutral-800 p-4 mb-4">
-          <h3 className="text-sm font-medium text-neutral-300 mb-2">Matched coaches</h3>
+          <h3 className="text-sm font-medium text-neutral-300 mb-2">{labels.matched}</h3>
           <ul className="text-sm text-neutral-400 list-disc list-inside">
             {coaches.map((c) => (
               <li key={c.id}>{c.coach_name}</li>
@@ -138,15 +210,17 @@ export default async function ConversationDetailPage({ params }: { params: Promi
       {quoteRequest && (
         <div className="bg-neutral-900 rounded-lg border border-amber-900/40 p-4 mb-4">
           <h3 className="text-sm font-medium text-amber-400 mb-3">
-            {quoteRequest.is_purchase_order ? "Purchase Order brief" : "Quote request"}
+            {quoteRequest.is_purchase_order ? labels.purchase : labels.quote}
           </h3>
-          {renderQuoteSummary(quoteRequest.summary_text)}
-          <p className="text-xs text-neutral-500 mt-3">Contact: {quoteRequest.contact_info || "not provided"}</p>
+          {renderQuoteSummary(quoteRequest.summary_text, labels)}
+          <p className="text-xs text-neutral-500 mt-3">
+            {labels.contact}: {quoteRequest.contact_info || labels.notProvided}
+          </p>
         </div>
       )}
 
       <div className="bg-neutral-900 rounded-lg border border-neutral-800 p-4 mb-4">
-        <h3 className="text-sm font-medium text-neutral-300 mb-3">Transcript</h3>
+        <h3 className="text-sm font-medium text-neutral-300 mb-3">{labels.transcript}</h3>
         <div className="flex flex-col gap-3">
           {transcript.map((m, i) => {
             const isUser = m.role === "user";
@@ -161,28 +235,30 @@ export default async function ConversationDetailPage({ params }: { params: Promi
                 >
                   {m.content}
                   {isUser && moodForTurn && (
-                    <div className="text-[10px] opacity-60 mt-1">mood: {moodForTurn.mood}</div>
+                    <div className="text-[10px] opacity-60 mt-1">
+                      {labels.mood}: {moodForTurn.mood}
+                    </div>
                   )}
                 </div>
               </div>
             );
           })}
           {transcript.length === 0 && (
-            <p className="text-sm text-neutral-600 italic">No transcript recorded.</p>
+            <p className="text-sm text-neutral-600 italic">{labels.emptyTranscript}</p>
           )}
         </div>
       </div>
 
       {moodHistory.length > 0 && (
         <div className="bg-neutral-900 rounded-lg border border-neutral-800 p-4">
-          <h3 className="text-sm font-medium text-neutral-300 mb-2">Mood history (debug view)</h3>
+          <h3 className="text-sm font-medium text-neutral-300 mb-2">{labels.moodHistory}</h3>
           <div className="flex flex-wrap gap-2">
             {moodHistory.map((mh, i) => (
               <span
                 key={i}
                 className="text-xs bg-black border border-neutral-800 rounded px-2 py-1 text-neutral-400"
               >
-                Turn {mh.turn}: {mh.mood}
+                {labels.turn} {mh.turn}: {mh.mood}
               </span>
             ))}
           </div>

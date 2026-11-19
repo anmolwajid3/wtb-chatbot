@@ -1,3 +1,4 @@
+import { Breadcrumbs } from "../../components/Breadcrumbs";
 import { getPool } from "@/lib/db";
 import { canEditCompany } from "@/lib/plans";
 import { getWorkspace } from "@/lib/workspace";
@@ -42,6 +43,13 @@ export default async function MasterPromptsPage() {
 
   return (
     <div className="max-w-4xl mx-auto p-8">
+      <Breadcrumbs
+        items={[
+          { href: "/home", label: "Home" },
+          { href: "/chatbot", label: "Chatbot" },
+          { label: "Prompts" },
+        ]}
+      />
       <h1 className="font-display text-2xl font-semibold text-amber-400 uppercase tracking-wide mb-2">
         Master Prompts
       </h1>

@@ -10,12 +10,17 @@ export type DiagnosticCheck = {
   detail: string;
 };
 
+function backendBaseUrl() {
+  const raw = process.env.BACKEND_URL || process.env.OPAS_API_URL || "http://127.0.0.1:8000";
+  return raw.replace(/\/$/, "");
+}
+
 export async function runCompanyDiagnostics(): Promise<DiagnosticCheck[]> {
   const { session, organization } = await requireOrganization();
   if (!canEditCompany(session.role)) {
     return [{ name: "Access", level: "fail", agent: "—", detail: "This account cannot run diagnostics." }];
   }
-  const response = await fetch("http://127.0.0.1:8000/diagnose", {
+  const response = await fetch(`${backendBaseUrl()}/diagnose`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ organization_slug: organization.slug }),
