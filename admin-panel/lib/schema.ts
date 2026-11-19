@@ -449,6 +449,19 @@ async function run() {
   await seedWtbCompany();
   await seedSignInAccounts();
   await seedFinnishContent();
+  await dedupeGuardrails();
+}
+
+async function dedupeGuardrails() {
+  const pool = getPool();
+  await pool.query(
+    `DELETE FROM guardrails a
+     USING guardrails b
+     WHERE a.ctid > b.ctid
+       AND lower(btrim(a.rule_text)) = lower(btrim(b.rule_text))
+       AND COALESCE(a.organization_id, '00000000-0000-0000-0000-000000000000'::uuid)
+         = COALESCE(b.organization_id, '00000000-0000-0000-0000-000000000000'::uuid)`
+  );
 }
 
 async function seedFinnishContent() {
@@ -639,27 +652,6 @@ async function seedSignInAccounts() {
     );
   }
 
-  const coaches = [
-    ["User", "user"],
-    ["WTB Coach One", "coach.one"],
-    ["WTB Coach Two", "coach.two"],
-    ["WTB Coach Three", "coach.three"],
-  ];
-  for (const [name, username] of coaches) {
-    const existing = await pool.query(`SELECT id FROM coach_accounts WHERE username = $1`, [username]);
-    if (existing.rows.length > 0) continue;
-    const coach = await pool.query(
-      `INSERT INTO coaches (coach_name, organization_id, is_active, is_synthetic, short_description)
-       VALUES ($1, $2, true, true, $3)
-       RETURNING id`,
-      [name, organizationId, "Sign-in profile for WTB."]
-    );
-    await pool.query(
-      `INSERT INTO coach_accounts (coach_id, username, password_hash, must_change_password)
-       VALUES ($1, $2, $3, false)`,
-      [coach.rows[0].id, username, passwordHash]
-    );
-  }
 }
 
 export function ensureSchema(): Promise<void> {
