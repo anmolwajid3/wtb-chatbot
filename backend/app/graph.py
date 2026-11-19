@@ -5,22 +5,20 @@ Flow (per blueprint Section 9.3 — grounding enforced by node ORDER, not just
 prompt wording):
 
     intent_router -> [spam? end] -> mood_tone -> coach_matcher -> formatter
-        -> [ guardrail_check -> response_reviewer ]  <-- loops until clean
         -> summarizer -> END
 
-The Formatter only ever sees verified, pre-filtered data (matched coach IDs
-resolved to pricing-free records, admin-controlled tone guidance) — it has
-nothing to hallucinate from.
+    Match replies are composed from verified rows, so this path does not
+    call the guardrail or reviewer models. Those nodes remain for a direct
+    check, but routing a match through them stacked several more model
+    calls on the timing answer and the live gateway returned 502.
 
-Guardrail Check and Response Reviewer form a genuine loop, not a single pass:
-after each one runs, if either found a problem and rewrote the reply, control
-goes back to Guardrail Check to re-validate the newest text (since a rewrite
-from either agent could reintroduce a problem the other agent would catch).
-The loop only exits once one full round comes back completely clean from both
-agents, or a safety cap (MAX_SAFETY_ROUNDS) is hit, in which case a fixed
-safe fallback reply is used instead — this cap exists purely to guarantee the
-request eventually returns even if the model can't converge; it is not a
-cost-control measure.
+The Formatter only ever sees verified, pre-filtered data (matched coach IDs
+resolved to pricing-free records) and writes the grounded template. It does
+not call a model on the match path.
+
+Guardrail Check and Response Reviewer still exist as functions, with a safety
+cap if they are invoked directly. The chat graph does not route the timing
+answer through them.
 """
 import uuid
 import re
@@ -141,8 +139,8 @@ def build_graph():
     graph.add_edge("coach_matcher", "formatter")
     graph.add_conditional_edges(
         "formatter",
-        lambda state: "guardrail_check" if state.get("ready_to_match") else "done",
-        {"guardrail_check": "guardrail_check", "done": END},
+        lambda state: "summarizer" if state.get("ready_to_match") else "done",
+        {"summarizer": "summarizer", "done": END},
     )
     graph.add_edge("guardrail_check", "response_reviewer")
     graph.add_conditional_edges(
