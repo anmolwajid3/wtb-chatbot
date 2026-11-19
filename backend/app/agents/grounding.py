@@ -28,11 +28,138 @@ COACHING_HINT = re.compile(
     r")\b",
     re.I,
 )
+# Finnish compounds don't end on the dictionary stem ("myyntikoulutusta", "tiimille").
+_COACHING_STEM = re.compile(
+    r"\b(?:myynti\w*|koulut\w*|valmenn\w*|tiimi\w*|motivaatio\w*|esimie\w*|johtami\w*)",
+    re.I,
+)
 
 
 def looks_like_coaching_need(text: str) -> bool:
     """True when the message signals a work/team/coaching context."""
-    return bool(COACHING_HINT.search(text or ""))
+    raw = text or ""
+    return bool(COACHING_HINT.search(raw) or _COACHING_STEM.search(raw))
+
+
+# Blank template tokens that showed up inside coach suggestions ("n/n", "{duration}").
+_TEMPLATE_TOKEN = re.compile(
+    r"""
+    (?<![A-Za-z0-9])n\s*/\s*n(?![A-Za-z0-9])
+    |
+    \{\{?[A-Za-z_][A-Za-z0-9_]*\}\}?
+    |
+    \[(?:n|x|xx|xxx|todo|tbd|placeholder)\]
+    |
+    <(?:n|x|xx|placeholder)>
+    |
+    _{3,}
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+_DANGLING_PREP = re.compile(r"\b(of|for|about|around)\b\s*(?=[,.;:!?]|$)", re.IGNORECASE)
+
+
+def strip_empty_template_tokens(text: str | None) -> str:
+    """Drop unfilled template tokens and tidy the space they leave behind."""
+    if not text:
+        return ""
+    cleaned = _TEMPLATE_TOKEN.sub(" ", str(text))
+    cleaned = re.sub(r"\(\s*\)", " ", cleaned)
+    cleaned = re.sub(r"\[\s*\]", " ", cleaned)
+    cleaned = _DANGLING_PREP.sub("", cleaned)
+    cleaned = re.sub(r"\s+([,.;:!?])", r"\1", cleaned)
+    cleaned = re.sub(r"\s*—\s*(?=[,.;:!?]|$)", "", cleaned)
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    cleaned = re.sub(r"\s+([,.;:!?])", r"\1", cleaned)
+    cleaned = cleaned.strip(" \t-|—/")
+    if not re.search(r"[A-Za-zÀ-ÖØ-öø-ÿ0-9]", cleaned):
+        return ""
+    return cleaned
+
+
+def scrub_profile(row: dict) -> dict:
+    """Copy a coach row with visitor-facing strings cleaned of empty tokens."""
+    cleaned = {}
+    for key, value in dict(row).items():
+        if isinstance(value, str):
+            cleaned[key] = strip_empty_template_tokens(value)
+        elif isinstance(value, list):
+            cleaned[key] = [
+                strip_empty_template_tokens(item) if isinstance(item, str) else item
+                for item in value
+            ]
+        else:
+            cleaned[key] = value
+    return cleaned
+
+
+_CONFUSION = re.compile(
+    r"("
+    r"\b(?:don'?t|do not|didn'?t|doesn'?t|cannot|can'?t)\s+understand\b"
+    r"|"
+    r"\b(?:what do you mean|what does (?:this|that) mean|can you (?:rephrase|explain|clarify)"
+    r"|please (?:rephrase|explain|clarify)|i(?:'m| am) confused|this is unclear"
+    r"|not sure what you(?:'re| are) asking)\b"
+    r"|"
+    r"\b(?:en\s+ymmärr\w*|en\s+ymmärt\w*|en\s+tajua|en\s+käsit\w*|mitä\s+tarkoitat|voitko\s+selittää|selitä(?:\s+uudelleen)?)\b"
+    r"|"
+    r"\b(?:jag förstår inte|förstår inte|vad menar du|kan du förklara|jag hänger inte med)\b"
+    r")",
+    re.IGNORECASE,
+)
+_CONFUSION_SHORT = re.compile(
+    r"^\s*(?:huh|what|excuse me|come again|häh|hä|mitä|va|förlåt)\s*[.?]?\s*$",
+    re.IGNORECASE,
+)
+_WARMUP_SKIP = re.compile(
+    r"^\s*(?:skip(?:\s+(?:this|it|that))?|ohita(?:\s+tämä|\s+tama)?|hoppa(?:\s+över)?|n/a)\s*[.!]?\s*$",
+    re.IGNORECASE,
+)
+_DONT_KNOW = re.compile(
+    r"^\s*(?:"
+    r"i don'?t know(?: exactly| really)?"
+    r"|i do not know"
+    r"|not sure"
+    r"|no idea"
+    r"|can'?t say"
+    r"|dunno"
+    r"|en osaa(?:\s+sanoa)?"
+    r"|en tiedä|en tieda"
+    r"|emmä tiedä"
+    r"|jag vet inte"
+    r"|vet inte"
+    r"|kan inte säga"
+    r")\s*[.!]?\s*$",
+    re.IGNORECASE,
+)
+
+
+def is_confusion(text: str) -> bool:
+    """Visitor is asking what the question means, not answering it."""
+    raw = (text or "").strip()
+    if not raw or is_warmup_skip(raw):
+        return False
+    if not (_CONFUSION.search(raw) or _CONFUSION_SHORT.fullmatch(raw)):
+        return False
+    # "I don't understand my team" is a need. "I don't understand the question" is not.
+    if looks_like_coaching_need(raw) and not _CONFUSION_SHORT.fullmatch(raw):
+        if re.search(r"\b(question|kysymys|kysymystä|frågan|mean|tarkoitat|menar)\b", raw, re.I):
+            return True
+        return False
+    return True
+
+
+def is_warmup_skip(text: str) -> bool:
+    """Explicit skip during intake. Ambiguous words like 'no' do not count."""
+    return bool(_WARMUP_SKIP.fullmatch((text or "").strip()))
+
+
+def is_dont_know(text: str) -> bool:
+    """Visitor can't answer ('En osaa sanoa', 'I don't know'). Not a coaching need."""
+    raw = (text or "").strip()
+    if not raw or is_warmup_skip(raw) or is_confusion(raw):
+        return False
+    return bool(_DONT_KNOW.fullmatch(raw))
 
 
 def compose_match_reply(
@@ -43,7 +170,7 @@ def compose_match_reply(
     """Build a match reply only from verified coach rows."""
     slots = slots or {}
     theme = (slots.get("theme") or "").strip()
-    if theme and len(theme) <= 80:
+    if theme and len(theme) <= 80 and theme.lower() not in {"unspecified", "not specified"}:
         lead = t(locale, "match_lead_theme", theme=theme)
     else:
         lead = t(locale, "match_lead_generic")
@@ -54,7 +181,7 @@ def compose_match_reply(
         program = (coach.get("program_name") or "").strip()
         if not name or not program:
             continue
-        desc = (coach.get("short_description") or "").strip()
+        desc = strip_empty_template_tokens(coach.get("short_description") or "")
         line = f"**{program}** with **{name}**"
         if desc:
             line = f"{line} — {desc}"

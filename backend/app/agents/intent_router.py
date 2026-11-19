@@ -13,9 +13,11 @@ Responsibilities (per blueprint Section 5.1):
 import re
 from pydantic import BaseModel, Field
 from app.llm import get_llm
+from app.agents.formatter import apply_warmup_skip
 from app.agents.guardrail_check import visitor_advice_rule
-from app.agents.grounding import looks_like_coaching_need
+from app.agents.grounding import is_confusion, is_dont_know, is_warmup_skip, looks_like_coaching_need
 from app.db.connection import fetch_match_settings, get_agent_prompt
+from app.i18n import is_language_switch
 
 
 class IntakeExtraction(BaseModel):
@@ -79,6 +81,10 @@ def _timing_phrase(text: str) -> str | None:
         r"\b(?:next month|this month|next week|this week|this quarter)\b",
         r"\b(?:asap|as soon as possible|right away|immediately)\b",
         r"\b(?:no rush|no urgent deadline|soon)\b",
+        r"\b(?:tammikuussa|helmikuussa|maaliskuussa|huhtikuussa|toukokuussa|"
+        r"kesäkuussa|heinäkuussa|elokuussa|syyskuussa|lokakuussa|marraskuussa|joulukuussa)\b",
+        r"\b(?:ensi kuussa|ensi vuonna|tänä vuonna|kuukauden kuluessa|mahdollisimman pian)\b",
+        r"\b(?:nästa månad|den här månaden|inom en månad|så snart som möjligt)\b",
     )
     for pattern in patterns:
         match = re.search(pattern, text, re.I)
@@ -109,8 +115,11 @@ def _still_needs_the_agent(text: str, found_timing: str | None, slots: dict) -> 
 
 def _looks_like_a_situation(text: str) -> bool:
     """A real coaching/work need — not a short price question or personal aside."""
-    words = re.findall(r"[A-Za-z']+", text)
-    if len(words) < 6:
+    if is_confusion(text) or is_warmup_skip(text) or is_dont_know(text) or is_language_switch(text):
+        return False
+    words = re.findall(r"[^\W\d_]+", text, flags=re.UNICODE)
+    minimum = 3 if looks_like_coaching_need(text) else 6
+    if len(words) < minimum:
         return False
     if re.search(r"\b(price|pricing|cost|how much|fee|fees)\b", text, re.I) and len(words) < 14:
         return False
@@ -149,22 +158,31 @@ def run_intent_router(state: dict) -> dict:
         state["ready_to_match"] = False
         return state
 
-    found_timing = _timing_phrase(latest_message)
+    asking_about_the_question = (
+        is_confusion(latest_message)
+        or is_warmup_skip(latest_message)
+        or is_dont_know(latest_message)
+        or is_language_switch(latest_message)
+    )
+    found_timing = None if asking_about_the_question else _timing_phrase(latest_message)
     if found_timing and not slots.get("timing"):
         slots["timing"] = found_timing
-    found_size = _group_size(latest_message)
+    found_size = None if asking_about_the_question else _group_size(latest_message)
     if found_size and not slots.get("group_size"):
         slots["group_size"] = found_size
-    if _looks_like_a_situation(latest_message):
+    if not asking_about_the_question and _looks_like_a_situation(latest_message):
         existing_need = slots.get("need_description") or ""
         if latest_message not in existing_need:
             slots["need_description"] = f"{existing_need} {latest_message}".strip()
         if not slots.get("theme"):
             slots["theme"] = latest_message[:80]
 
-    understood_locally = bool(
-        _price_question_text(latest_message) or _looks_like_a_situation(latest_message) or found_timing
-    ) and not _still_needs_the_agent(latest_message, found_timing, slots)
+    understood_locally = asking_about_the_question or (
+        bool(
+            _price_question_text(latest_message) or _looks_like_a_situation(latest_message) or found_timing
+        )
+        and not _still_needs_the_agent(latest_message, found_timing, slots)
+    )
     if not understood_locally:
         llm = get_llm(temperature=0.0, agent_name="intent_router", organization_id=state.get("organization_id"))
         structured_llm = llm.with_structured_output(IntakeExtraction)
@@ -204,6 +222,12 @@ def run_intent_router(state: dict) -> dict:
                 existing = slots.get("need_description", "")
                 slots["need_description"] = f"{existing} {result.need_description}".strip()
 
+    prior_assistant = [
+        m.get("content") or ""
+        for m in state.get("messages", [])[:-1]
+        if m.get("role") == "assistant"
+    ]
+    slots = apply_warmup_skip(slots, latest_message, state.get("locale"), prior_assistant)
     state["gathered_slots"] = slots
     state["turn_count"] = state.get("turn_count", 0) + 1
 
@@ -217,6 +241,19 @@ def run_intent_router(state: dict) -> dict:
         and bool(slots.get("timing"))
     )
     settings = fetch_match_settings(state.get("organization_id"))
-    state["ready_to_match"] = has_core_fields and state["turn_count"] >= settings["followup_turns"]
+    # A finished brief should move on. Asking "one more detail" again — the
+    # same sentence — is what visitors hit when followup_turns stays high.
+    # One rephrase is allowed when they say they don't understand or don't know.
+    asked_already = len([item for item in prior_assistant if (item or "").strip()])
+    wants_rephrase = (
+        is_confusion(latest_message) or is_dont_know(latest_message)
+    ) and asked_already < 2
+    turn = state["turn_count"]
+    if has_core_fields and turn >= 2 and wants_rephrase:
+        state["ready_to_match"] = False
+    elif has_core_fields and turn >= 2:
+        state["ready_to_match"] = True
+    else:
+        state["ready_to_match"] = has_core_fields and turn >= settings["followup_turns"]
 
     return state

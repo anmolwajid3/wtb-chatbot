@@ -156,7 +156,7 @@ export default async function ConversationDetailPage({ params }: { params: Promi
               <div key={i} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
                 <div
                   className={`max-w-[80%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
-                    isUser ? "bg-amber-500 text-black" : "bg-black border border-neutral-800 text-neutral-200"
+                    isUser ? "transcript-user" : "transcript-bot"
                   }`}
                 >
                   {m.content}

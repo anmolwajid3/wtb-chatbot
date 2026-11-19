@@ -19,6 +19,9 @@
     --amber-tint: rgba(255, 255, 255, 0.12);
     --cream: #F3EFE6;
     --cream-soft: #B8B2A6;
+    --on-accent: #241A0A;
+    --user-bubble: #FFFFFF;
+    --user-bubble-text: #241A0A;
     --radius-lg: 18px;
     --radius-md: 12px;
     --shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.55);
@@ -38,6 +41,9 @@
     --amber-tint: rgba(154, 98, 20, 0.12);
     --cream: #1C1915;
     --cream-soft: #5E574E;
+    --on-accent: #F4F7F2;
+    --user-bubble: #16301C;
+    --user-bubble-text: #F4F7F2;
     --shadow: 0 18px 40px -16px rgba(60, 40, 10, 0.2);
   }
 
@@ -110,7 +116,7 @@
   }
   .demo-tools button[aria-pressed="true"] {
     background: var(--amber);
-    color: #241A0A;
+    color: var(--on-accent);
     border-color: var(--amber);
   }
   .demo-note {
@@ -287,8 +293,8 @@
     white-space: pre-wrap;
   }
   .msg.user .bubble {
-    background: var(--amber);
-    color: #241A0A;
+    background: var(--user-bubble);
+    color: var(--user-bubble-text);
     font-weight: 500;
     border-bottom-right-radius: 4px;
   }
@@ -518,7 +524,7 @@
   .coach-detail-select-btn {
     width: 100%;
     background: var(--amber);
-    color: #241A0A;
+    color: var(--on-accent);
     border: none;
     border-radius: var(--radius-md);
     padding: 12px;
@@ -562,7 +568,7 @@
     border-radius: 50%;
     background: var(--amber);
     border: none;
-    color: #241A0A;
+    color: var(--on-accent);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -922,6 +928,21 @@
   launcher.addEventListener('click', openPanel);
   closeBtn.addEventListener('click', closePanel);
 
+  function scrubTemplateTokens(text) {
+    if (!text) return '';
+    let cleaned = String(text)
+      .replace(/(^|[^A-Za-z0-9])n\s*\/\s*n(?![A-Za-z0-9])/gi, '$1')
+      .replace(/\{\{?[A-Za-z_][A-Za-z0-9_]*\}\}?/g, ' ')
+      .replace(/\[(?:n|x|xx|xxx|todo|tbd|placeholder)\]/gi, ' ')
+      .replace(/<(?:n|x|xx|placeholder)>/gi, ' ')
+      .replace(/_{3,}/g, ' ');
+    cleaned = cleaned.replace(/\(\s*\)/g, ' ').replace(/\[\s*\]/g, ' ');
+    cleaned = cleaned.replace(/\b(of|for|about|around)\b\s*(?=[,.;:!?]|$)/gi, '');
+    cleaned = cleaned.replace(/\s+([,.;:!?])/g, '$1');
+    cleaned = cleaned.replace(/[ \t]{2,}/g, ' ').trim();
+    return /[A-Za-z0-9À-ÿ]/.test(cleaned) ? cleaned : '';
+  }
+
   function addUserMessage(text) {
     const row = document.createElement('div');
     row.className = 'msg user';
@@ -932,10 +953,12 @@
   }
 
   function addBotMessage(text) {
+    const clean = scrubTemplateTokens(text);
+    if (!clean) return;
     const row = document.createElement('div');
     row.className = 'msg bot';
     row.innerHTML = '<div class="bubble"></div>';
-    row.querySelector('.bubble').textContent = text;
+    row.querySelector('.bubble').textContent = clean;
     messagesEl.appendChild(row);
     scrollToBottom();
   }
@@ -1088,7 +1111,7 @@
 
       card.querySelector('.coach-name').textContent = coach.coach_name || '';
       card.querySelector('.coach-program').textContent = coach.program_name || '';
-      card.querySelector('.coach-desc').textContent = coach.short_description || '';
+      card.querySelector('.coach-desc').textContent = scrubTemplateTokens(coach.short_description || '');
 
       cardsWrap.appendChild(card);
     });
@@ -1198,12 +1221,14 @@
 
     detailName.textContent = coach.coach_name || '';
     detailProgram.textContent = coach.program_name || '';
-    detailDesc.textContent = coach.long_description || coach.short_description || '';
+    detailDesc.textContent = scrubTemplateTokens(coach.long_description || coach.short_description || '');
 
     detailMeta.innerHTML = '';
     [coach.target_group, coach.delivery_format, coach.duration].filter(Boolean).forEach((item) => {
       const span = document.createElement('span');
-      span.textContent = item;
+      const label = scrubTemplateTokens(item);
+      if (!label) return;
+      span.textContent = label;
       detailMeta.appendChild(span);
     });
 

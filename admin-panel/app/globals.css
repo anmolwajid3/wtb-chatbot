@@ -212,3 +212,22 @@ html.dark .stat-bar { background: #243028; }
   border-radius: 999px;
 }
 html.dark .stat-bar > span { background: #FFFFFF; }
+
+.transcript-user {
+  background: #16301C !important;
+  color: #F4F7F2 !important;
+}
+html.dark .transcript-user {
+  background: #FFFFFF !important;
+  color: #122018 !important;
+}
+.transcript-bot {
+  background: #FFFFFF !important;
+  color: #122018 !important;
+  border: 1px solid #E2E8DE;
+}
+html.dark .transcript-bot {
+  background: #101610 !important;
+  color: #F4F7F2 !important;
+  border-color: #314033;
+}

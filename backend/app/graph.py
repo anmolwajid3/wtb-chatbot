@@ -35,7 +35,8 @@ from app.agents.guardrail_check import run_guardrail_check
 from app.agents.response_reviewer import run_response_reviewer
 from app.agents.summarizer import run_summarizer
 from app.db.connection import save_conversation_state, fetch_coaches_by_ids
-from app.i18n import normalize_locale, resolve_locale, t
+from app.agents.grounding import scrub_profile, strip_empty_template_tokens
+from app.i18n import normalize_locale, reply_language_ok, resolve_locale, t
 
 
 class ChatState(TypedDict):
@@ -78,11 +79,7 @@ def _route_after_intent(state: ChatState) -> str:
 
 
 def _spam_reply_node(state: ChatState) -> ChatState:
-    state["final_reply"] = (
-        "Thanks for reaching out! It looks like this message might not be related "
-        "to these services — if I've misunderstood, feel free to try again "
-        "describing what you're looking for."
-    )
+    state["final_reply"] = t(state.get("locale"), "spam_reply")
     return state
 
 
@@ -90,12 +87,6 @@ def _spam_reply_node(state: ChatState) -> ChatState:
 # non-converging model would leave a request hanging forever with no reply
 # ever reaching the visitor, which is strictly worse than a generic fallback.
 MAX_SAFETY_ROUNDS = 5
-
-SAFETY_FALLBACK_REPLY = (
-    "Thanks for your patience with this one — let me have a member of our team "
-    "follow up with you directly, so you get a properly considered answer rather "
-    "than a rushed one."
-)
 
 
 def _route_after_review(state: ChatState) -> str:
@@ -119,7 +110,7 @@ def _route_after_review(state: ChatState) -> str:
 
 
 def _safety_fallback_node(state: ChatState) -> ChatState:
-    state["final_reply"] = SAFETY_FALLBACK_REPLY
+    state["final_reply"] = t(state.get("locale"), "safety_fallback")
     state["safety_fallback_used"] = True
     return state
 
@@ -214,7 +205,7 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
     """
     state = _conversations_in_memory.get(conversation_id)
     if state is None:
-        reply = "This conversation seems to have expired — please start a new one and I'll help you again."
+        reply = t(None, "conversation_expired")
         return {
             "conversation_id": conversation_id,
             "reply": reply,
@@ -226,7 +217,7 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
 
     matched_ids = state.get("matched_coaches", [])
     if selected_coach_id not in matched_ids:
-        reply = "I couldn't match that selection to what was offered — could you try again?"
+        reply = t(_locale(state), "selection_mismatch")
         state["messages"].append({"role": "assistant", "content": reply})
         _conversations_in_memory[conversation_id] = state
         return {
@@ -240,8 +231,8 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
 
     coach_records = fetch_coaches_by_ids([selected_coach_id])
     coach = coach_records[0] if coach_records else {}
-    coach_name = coach.get("coach_name", "that coach")
-    program_name = coach.get("program_name", "")
+    coach_name = coach.get("coach_name") or t(_locale(state), "fallback_coach")
+    program_name = coach.get("program_name") or ""
 
     # Narrow down to just the one chosen coach — this is what the Summarizer
     # will compile the quote request against on a later turn. coach_selected
@@ -412,8 +403,8 @@ def _selection_reply(state: dict, message: str) -> tuple[str, str]:
     """Answer the message in front of us. Returns the reply and stay, ask, or close."""
     locale = _locale(state)
     coach = _selected_coach(state)
-    name = coach.get("coach_name") or "that coach"
-    program = coach.get("program_name") or "the program"
+    name = coach.get("coach_name") or t(locale, "fallback_coach")
+    program = coach.get("program_name") or t(locale, "fallback_program")
     known = _known_fit_sentence(state)
     slots = dict(state.get("gathered_slots") or {})
     existing_contact = slots.get("contact")
@@ -421,13 +412,20 @@ def _selection_reply(state: dict, message: str) -> tuple[str, str]:
 
     if _PRICE_ASK.search(message):
         if existing_contact:
-            return (
-                f"I can't tell you what {name} charges for {program}. "
-                f"The team will include the quote when they write to {existing_contact}.{known}"
+            return t(
+                locale,
+                "price_have_contact",
+                name=name,
+                program=program,
+                contact=existing_contact,
+                known=known,
             ), "stay"
-        return (
-            f"I can't tell you what {name} charges for {program}. "
-            f"The team puts the number in the quote, so I still need your name and email.{known}"
+        return t(
+            locale,
+            "price_need_contact",
+            name=name,
+            program=program,
+            known=known,
         ), "stay"
 
     email = _EMAIL.search(message)
@@ -474,12 +472,21 @@ def _selection_reply(state: dict, message: str) -> tuple[str, str]:
     lowered = message.lower()
     if coach.get("duration") and re.search(r"\b(how long|duration|weeks|length|kauan|kesto)\b", lowered):
         return (
-            f"{program} with {name} runs {coach['duration']}.{known} "
+            t(locale, "duration_runs", program=program, name=name, duration=coach["duration"], known=known)
+            + " "
             + t(locale, "still_need_contact", coach_name=name, program_name=program, known="")
         ), "stay"
     if coach.get("delivery_format") and re.search(r"\b(remote|hybrid|format|online|in person|in-person|lähi|eta|etä)\b", lowered):
         return (
-            f"{name} delivers {program} as {coach['delivery_format']}.{known} "
+            t(
+                locale,
+                "format_runs",
+                name=name,
+                program=program,
+                delivery=coach["delivery_format"],
+                known=known,
+            )
+            + " "
             + t(locale, "still_need_contact", coach_name=name, program_name=program, known="")
         ), "stay"
 
@@ -495,16 +502,13 @@ def _selection_reply(state: dict, message: str) -> tuple[str, str]:
 def _closing_reply(state: dict, message: str) -> str:
     locale = _locale(state)
     coach = _selected_coach(state)
-    name = coach.get("coach_name") or "the coach"
-    program = coach.get("program_name") or "the program"
+    name = coach.get("coach_name") or t(locale, "fallback_coach")
+    program = coach.get("program_name") or t(locale, "fallback_program")
     note = " ".join(message.split())
     if len(note) > 160:
         note = note[:160].rstrip() + "..."
     if _PRICE_ASK.search(message):
-        return (
-            f"I can't tell you what {name} charges for {program}. "
-            f"I'll send what I have to the team and they'll include the quote when they write."
-        )
+        return t(locale, "price_send_team", name=name, program=program)
     if _SKIP_OPTIONAL.fullmatch(note):
         facts = ", ".join(_known_fit_facts(state))
         extra = t(locale, "already_have_facts", facts=facts) if facts else ""
@@ -546,15 +550,18 @@ def _post_handoff_reply(state: dict, message: str) -> tuple[str, str]:
 
     locale = _locale(state)
     coach = _selected_coach(state)
-    name = coach.get("coach_name") or "the coach"
-    program = coach.get("program_name") or "the program"
+    name = coach.get("coach_name") or t(locale, "fallback_coach")
+    program = coach.get("program_name") or t(locale, "fallback_program")
     contact = (state.get("gathered_slots") or {}).get("contact")
     contact_bit = t(locale, "contact_at", contact=contact) if contact else ""
 
     if _PRICE_ASK.search(message):
-        return (
-            f"I can't tell you what {name} charges for {program}. "
-            f"The team will include the quote when they write{contact_bit}."
+        return t(
+            locale,
+            "price_team_will_quote",
+            name=name,
+            program=program,
+            contact_bit=contact_bit,
         ), "stay"
 
     if _is_closing_ack(message):
@@ -611,6 +618,7 @@ def _handle_post_selection_message(conversation_id: str, message: str) -> dict:
         state["session_closed"] = True
         state["handoff_complete"] = True
 
+    reply = strip_empty_template_tokens(reply) if reply else reply
     if reply:
         state["messages"].append({"role": "assistant", "content": reply})
     state["final_reply"] = reply
@@ -652,17 +660,18 @@ def run_turn(
         if conversation_id
         else None
     )
-    # URL/widget locale locks the session — never switch from visitor text.
+    # URL/session locale, unless the visitor writes Finnish — then stay Finnish.
     locale = resolve_locale(
         requested=locale,
         session_locale=(existing or {}).get("locale"),
+        message=message,
     )
 
     if selected_coach_id:
         if not conversation_id:
             return {
                 "conversation_id": conversation_id or "",
-                "reply": "Please start a conversation before selecting a coach.",
+                "reply": t(locale, "start_before_select"),
                 "outcome": "in_progress",
                 "detected_mood": "neutral",
                 "coach_matches": [],
@@ -724,7 +733,13 @@ def run_turn(
     # Belt-and-suspenders: keep locale even if a future schema drift drops it.
     result_state["locale"] = locale or result_state.get("locale") or "en"
 
-    result_state["messages"].append({"role": "assistant", "content": result_state["final_reply"]})
+    result_state["final_reply"] = strip_empty_template_tokens(result_state.get("final_reply") or "")
+    if result_state["final_reply"] and not reply_language_ok(
+        result_state["final_reply"], result_state.get("locale")
+    ):
+        result_state["final_reply"] = t(result_state.get("locale"), "intake_move_on")
+    if result_state["final_reply"]:
+        result_state["messages"].append({"role": "assistant", "content": result_state["final_reply"]})
     _conversations_in_memory[conversation_id] = result_state
 
     # Persist to Postgres after every turn so nothing is lost and the
@@ -748,7 +763,8 @@ def run_turn(
     if matched_ids:
         scores = result_state.get("matched_coach_scores", {})
         coach_records = fetch_coaches_by_ids(matched_ids)
-        for c in coach_records:
+        for raw in coach_records:
+            c = scrub_profile(raw)
             coach_id = str(c.get("id"))
             image_urls = c.get("image_urls") or []
             coach_matches.append({

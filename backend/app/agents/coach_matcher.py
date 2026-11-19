@@ -8,6 +8,7 @@ were present in the verified rows it was given — anything else is rejected.
 import json
 
 from pydantic import BaseModel, Field, ValidationError
+from app.agents.grounding import scrub_profile
 from app.llm import get_llm
 from app.db.connection import fetch_active_coaches, fetch_match_settings, get_agent_prompt
 
@@ -90,7 +91,7 @@ def run_coach_matcher(state: dict) -> dict:
     if not state.get("ready_to_match"):
         return state
 
-    candidates = fetch_active_coaches(state.get("organization_id"))
+    candidates = [scrub_profile(row) for row in fetch_active_coaches(state.get("organization_id"))]
 
     if not candidates:
         state["matched_coaches"] = []
