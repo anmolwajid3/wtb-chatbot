@@ -28,11 +28,17 @@ COACHING_HINT = re.compile(
     r")\b",
     re.I,
 )
+# Finnish compounds don't end on the dictionary stem ("myyntikoulutusta", "tiimille").
+_COACHING_STEM = re.compile(
+    r"\b(?:myynti\w*|koulut\w*|valmenn\w*|tiimi\w*|motivaatio\w*|esimie\w*|johtami\w*)",
+    re.I,
+)
 
 
 def looks_like_coaching_need(text: str) -> bool:
     """True when the message signals a work/team/coaching context."""
-    return bool(COACHING_HINT.search(text or ""))
+    raw = text or ""
+    return bool(COACHING_HINT.search(raw) or _COACHING_STEM.search(raw))
 
 
 # Blank template tokens that showed up inside coach suggestions ("n/n", "{duration}").
@@ -95,7 +101,7 @@ _CONFUSION = re.compile(
     r"|please (?:rephrase|explain|clarify)|i(?:'m| am) confused|this is unclear"
     r"|not sure what you(?:'re| are) asking)\b"
     r"|"
-    r"\b(?:en ymmärrä|en tajua|en käsitä|mitä tarkoitat|voitko selittää|selitä(?:\s+uudelleen)?)\b"
+    r"\b(?:en\s+ymmärr\w*|en\s+ymmärt\w*|en\s+tajua|en\s+käsit\w*|mitä\s+tarkoitat|voitko\s+selittää|selitä(?:\s+uudelleen)?)\b"
     r"|"
     r"\b(?:jag förstår inte|förstår inte|vad menar du|kan du förklara|jag hänger inte med)\b"
     r")",
@@ -107,6 +113,23 @@ _CONFUSION_SHORT = re.compile(
 )
 _WARMUP_SKIP = re.compile(
     r"^\s*(?:skip(?:\s+(?:this|it|that))?|ohita(?:\s+tämä|\s+tama)?|hoppa(?:\s+över)?|n/a)\s*[.!]?\s*$",
+    re.IGNORECASE,
+)
+_DONT_KNOW = re.compile(
+    r"^\s*(?:"
+    r"i don'?t know(?: exactly| really)?"
+    r"|i do not know"
+    r"|not sure"
+    r"|no idea"
+    r"|can'?t say"
+    r"|dunno"
+    r"|en osaa(?:\s+sanoa)?"
+    r"|en tiedä|en tieda"
+    r"|emmä tiedä"
+    r"|jag vet inte"
+    r"|vet inte"
+    r"|kan inte säga"
+    r")\s*[.!]?\s*$",
     re.IGNORECASE,
 )
 
@@ -129,6 +152,14 @@ def is_confusion(text: str) -> bool:
 def is_warmup_skip(text: str) -> bool:
     """Explicit skip during intake. Ambiguous words like 'no' do not count."""
     return bool(_WARMUP_SKIP.fullmatch((text or "").strip()))
+
+
+def is_dont_know(text: str) -> bool:
+    """Visitor can't answer ('En osaa sanoa', 'I don't know'). Not a coaching need."""
+    raw = (text or "").strip()
+    if not raw or is_warmup_skip(raw) or is_confusion(raw):
+        return False
+    return bool(_DONT_KNOW.fullmatch(raw))
 
 
 def compose_match_reply(

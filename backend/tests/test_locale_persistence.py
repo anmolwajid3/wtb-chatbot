@@ -1,4 +1,4 @@
-"""URL/widget locale locks the session; never switch mid-chat from visitor text."""
+"""URL/session locale sticks, and Finnish writing locks the session to Finnish."""
 from unittest.mock import patch
 
 from langgraph.graph import END, StateGraph
@@ -59,16 +59,19 @@ def test_langgraph_keeps_locale_when_declared_on_chatstate():
     assert out["final_reply"] == t("fi", "ask_timing")
 
 
-def test_url_lang_locks_session_no_midchat_switch():
-    """?lang=en must stay English even when the visitor writes Finnish."""
-    assert resolve_locale(requested="en", message="Tiimini on menettämässä motivaationsa.") == "en"
+def test_url_lang_locks_session_and_finnish_writing_sticks():
+    """English URL stays English until the visitor writes Finnish, then it stays Finnish."""
+    assert resolve_locale(requested="en", message="We need leadership training for new managers") == "en"
+    assert resolve_locale(requested="en", message="Suomeksi") == "fi"
     assert resolve_locale(
-        requested="fi",
-        session_locale="en",
-        message="Haluaisin aloittaa noin kuukauden kuluttua.",
-    ) == "en"
+        requested="en",
+        message="Haluaisin myyntikoulutusta tammikuussa.",
+    ) == "fi"
+    assert resolve_locale(requested="en", session_locale="fi", message="ok") == "fi"
+    assert resolve_locale(requested="en", session_locale="fi", message="En ymmärtänyt") == "fi"
     assert resolve_locale(requested="fi", session_locale=None) == "fi"
     assert resolve_locale(requested=None, session_locale="sv") == "sv"
+    assert resolve_locale(requested="en", session_locale="en", message="next month") == "en"
 
 
 def test_locale_packs_do_not_mix():
@@ -91,14 +94,15 @@ def test_formatter_timing_uses_state_locale():
         "locale": "en",
     }
     out = run_formatter(state)
-    # EN session stays EN despite Finnish visitor text.
-    assert out["final_reply"] == t("en", "ask_timing")
-    assert "Milloin" not in out["final_reply"]
+    # Finnish visitor text locks the reply to Finnish, even if the state arrived as en.
+    assert out["locale"] == "fi"
+    assert out["final_reply"] == t("fi", "ask_timing")
+    assert "When would you" not in out["final_reply"]
 
 
-def test_run_turn_keeps_english_lock_with_finnish_message():
+def test_run_turn_locks_finnish_when_the_visitor_writes_finnish():
     graph_mod._compiled_graph = None
-    conv_id = "en-lock-1"
+    conv_id = "fi-lock-1"
     _conversations_in_memory.pop(conv_id, None)
 
     def fake_intent(state):
@@ -133,18 +137,20 @@ def test_run_turn_keeps_english_lock_with_finnish_message():
             locale="en",
             record=False,
         )
-        assert r1["reply"] == t("en", "ask_timing")
-        assert _conversations_in_memory[conv_id]["locale"] == "en"
+        assert r1["reply"] == t("fi", "ask_timing")
+        assert "When would you" not in r1["reply"]
+        assert _conversations_in_memory[conv_id]["locale"] == "fi"
 
-        # Later request claiming fi must not flip a locked EN session.
+        # A later English URL value must not flip a Finnish session back.
         r2 = run_turn(
             conv_id,
-            "Haluaisin aloittaa noin kuukauden kuluttua.",
-            locale="fi",
+            "ok",
+            locale="en",
             record=False,
         )
-        assert _conversations_in_memory[conv_id]["locale"] == "en"
-        assert "Milloin" not in (r2["reply"] or "")
+        assert _conversations_in_memory[conv_id]["locale"] == "fi"
+        assert "When would you" not in (r2["reply"] or "")
+        assert "milloin" in (r2["reply"] or "").lower()
 
 
 def test_finnish_url_pack_opener():
