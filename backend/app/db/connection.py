@@ -250,27 +250,33 @@ def fetch_active_guardrails(organization_id: str | None = None) -> list[dict]:
 
 def save_conversation_state(conversation_id: str, transcript: list, outcome: str,
                              matched_coach_ids: list, mood_history: list,
-                             organization_id: str | None = None) -> None:
+                             organization_id: str | None = None,
+                             session: dict | None = None) -> None:
     import json
     payload = (conversation_id, json.dumps(transcript), outcome, matched_coach_ids, json.dumps(mood_history))
+    session_json = json.dumps(session or {})
     with get_db_connection() as conn:
         with conn.cursor() as cur:
             try:
                 cur.execute(
+                    "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS session_json JSONB"
+                )
+                cur.execute(
                     """
-                    INSERT INTO conversations (id, transcript_json, outcome, matched_coach_ids, mood_history, organization_id)
-                    VALUES (%s, %s, %s, %s::uuid[], %s, %s)
+                    INSERT INTO conversations (id, transcript_json, outcome, matched_coach_ids, mood_history, organization_id, session_json)
+                    VALUES (%s, %s, %s, %s::uuid[], %s, %s, %s)
                     ON CONFLICT (id) DO UPDATE SET
                         transcript_json = EXCLUDED.transcript_json,
                         outcome = EXCLUDED.outcome,
                         matched_coach_ids = EXCLUDED.matched_coach_ids,
                         mood_history = EXCLUDED.mood_history,
-                        organization_id = COALESCE(EXCLUDED.organization_id, conversations.organization_id)
+                        organization_id = COALESCE(EXCLUDED.organization_id, conversations.organization_id),
+                        session_json = EXCLUDED.session_json
                     """,
-                    (*payload, organization_id),
+                    (*payload, organization_id, session_json),
                 )
             except Exception as exc:
-                if "organization_id" not in str(exc):
+                if "organization_id" not in str(exc) and "session_json" not in str(exc):
                     raise
                 conn.rollback()
                 cur.execute(
@@ -285,6 +291,84 @@ def save_conversation_state(conversation_id: str, transcript: list, outcome: str
                     """,
                     payload,
                 )
+
+
+def load_conversation_session(conversation_id: str) -> dict | None:
+    """Rebuild in-memory chat state after a restart or a different machine."""
+    import json
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT transcript_json, outcome, matched_coach_ids, mood_history,
+                           organization_id, session_json
+                    FROM conversations WHERE id = %s
+                    """,
+                    (conversation_id,),
+                )
+                row = cur.fetchone()
+    except Exception:
+        return None
+    if not row:
+        return None
+    blob = row.get("session_json") or {}
+    if isinstance(blob, str):
+        try:
+            blob = json.loads(blob)
+        except (TypeError, ValueError):
+            blob = {}
+    if not isinstance(blob, dict):
+        blob = {}
+    messages = row.get("transcript_json") or []
+    if isinstance(messages, str):
+        try:
+            messages = json.loads(messages)
+        except (TypeError, ValueError):
+            messages = []
+    matched = blob.get("matched_coaches")
+    if not matched:
+        matched = [str(item) for item in (row.get("matched_coach_ids") or [])]
+    if not blob.get("coach_selected") and not messages:
+        return None
+    mood = row.get("mood_history") or []
+    if isinstance(mood, str):
+        try:
+            mood = json.loads(mood)
+        except (TypeError, ValueError):
+            mood = []
+    return {
+        "conversation_id": conversation_id,
+        "organization_id": row.get("organization_id") or blob.get("organization_id"),
+        "messages": messages,
+        "turn_count": int(blob.get("turn_count") or 0),
+        "gathered_slots": blob.get("gathered_slots") or {},
+        "ready_to_match": False,
+        "detected_mood": blob.get("detected_mood") or "neutral",
+        "mood_history": mood if isinstance(mood, list) else [],
+        "tone_guidance": {},
+        "matched_coaches": [str(item) for item in matched],
+        "matched_coach_scores": blob.get("matched_coach_scores") or {},
+        "coach_selected": bool(blob.get("coach_selected")),
+        "post_selection_turns": int(blob.get("post_selection_turns") or 0),
+        "outcome": row.get("outcome") or blob.get("outcome") or "in_progress",
+        "draft_reply": "",
+        "guardrail_violated": False,
+        "guardrail_which_rule": None,
+        "guardrail_regex_flagged": False,
+        "review_passed": True,
+        "review_issues": [],
+        "safety_loop_count": 0,
+        "safety_fallback_used": False,
+        "advice_blocked": False,
+        "off_topic_this_turn": False,
+        "final_reply": "",
+        "quote_summary": "",
+        "locale": blob.get("locale") or "en",
+        "awaiting_optional_details": bool(blob.get("awaiting_optional_details")),
+        "handoff_complete": bool(blob.get("handoff_complete")),
+        "session_closed": bool(blob.get("session_closed")),
+    }
 
 def save_quote_request(conversation_id: str, summary_text: str, contact_info: str,
                         is_purchase_order: bool) -> None:

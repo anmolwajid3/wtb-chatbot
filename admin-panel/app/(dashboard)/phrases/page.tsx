@@ -1,15 +1,29 @@
 import { getPool } from "@/lib/db";
 import { assertStaff, canEditCompany } from "@/lib/plans";
 import { getWorkspace, requireOrganization } from "@/lib/workspace";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { Breadcrumbs } from "../../components/Breadcrumbs";
 import { getLocale } from "@/lib/i18n";
 import PhraseItem from "./PhraseItem";
 
+const PHRASE_LOCALES = [
+  { id: "en", label: "EN" },
+  { id: "fi", label: "FI" },
+] as const;
+
+type PhraseLocale = (typeof PHRASE_LOCALES)[number]["id"];
+
 export const dynamic = "force-dynamic";
 
-type Phrase = { id: string; situation_type: string; phrase_text: string; is_active: boolean };
+type Phrase = {
+  id: string;
+  situation_type: string;
+  phrase_text: string;
+  is_active: boolean;
+  locale?: string | null;
+};
 
 async function getPhrases(organizationId: string | null): Promise<Phrase[]> {
   const pool = getPool();
@@ -29,12 +43,14 @@ async function addPhrase(formData: FormData) {
   await assertStaff(canEditCompany);
   const situation_type = formData.get("situation_type") as string;
   const phrase_text = formData.get("phrase_text") as string;
+  const requested = String(formData.get("locale") || "en");
+  const pack: PhraseLocale = requested === "fi" ? "fi" : "en";
   if (!phrase_text?.trim()) return;
   const workspace = await getWorkspace();
   const pool = getPool();
   await pool.query(
     `INSERT INTO example_phrases (situation_type, phrase_text, organization_id, locale) VALUES ($1, $2, $3, $4)`,
-    [situation_type, phrase_text, workspace?.organization?.id ?? null, "en"]
+    [situation_type, phrase_text, workspace?.organization?.id ?? null, pack]
   );
   revalidatePath("/phrases");
 }
@@ -63,10 +79,12 @@ function MoodColumn({
   title,
   situationType,
   phrases,
+  pack,
 }: {
   title: string;
   situationType: string;
   phrases: Phrase[];
+  pack: PhraseLocale;
 }) {
   const filtered = phrases.filter((p) => p.situation_type === situationType);
 
@@ -83,6 +101,7 @@ function MoodColumn({
       </ul>
       <form action={addPhrase} className="flex gap-2">
         <input type="hidden" name="situation_type" value={situationType} />
+        <input type="hidden" name="locale" value={pack} />
         <input
           type="text"
           name="phrase_text"
@@ -100,12 +119,19 @@ function MoodColumn({
   );
 }
 
-export default async function PhrasesPage() {
+export default async function PhrasesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ pack?: string }>;
+}) {
   const { session, organization } = await requireOrganization();
   if (!canEditCompany(session.role)) redirect("/home");
   const locale = await getLocale();
   const phrases = await getPhrases(organization.id);
   const fi = locale === "fi";
+  const params = await searchParams;
+  const pack: PhraseLocale = params.pack === "en" || params.pack === "fi" ? params.pack : fi ? "fi" : "en";
+  const visible = phrases.filter((phrase) => (phrase.locale || "en") === pack);
 
   return (
     <div className="max-w-6xl mx-auto p-8">
@@ -125,10 +151,25 @@ export default async function PhrasesPage() {
           : `These belong to ${organization.name}. They seed phrasing for each detected mood. The bot re-assesses mood on every turn — these phrases guide tone, they aren't copied verbatim every time.`}
       </p>
 
+      <div className="mb-6 flex gap-2" role="group" aria-label={fi ? "Fraasin kieli" : "Phrase language"}>
+        {PHRASE_LOCALES.map((item) => (
+          <Link
+            key={item.id}
+            href={`/phrases?pack=${item.id}`}
+            aria-pressed={pack === item.id}
+            className={`rounded-full border px-3 py-1 text-xs font-medium ${
+              pack === item.id ? "nav-link-active border-transparent" : "border-neutral-700 text-neutral-300"
+            }`}
+          >
+            {item.label}
+          </Link>
+        ))}
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <MoodColumn title={fi ? "Positiivinen" : "Positive"} situationType="positive" phrases={phrases} />
-        <MoodColumn title={fi ? "Negatiivinen" : "Negative"} situationType="negative" phrases={phrases} />
-        <MoodColumn title={fi ? "Neutraali" : "Neutral"} situationType="neutral" phrases={phrases} />
+        <MoodColumn title={fi ? "Positiivinen" : "Positive"} situationType="positive" phrases={visible} pack={pack} />
+        <MoodColumn title={fi ? "Negatiivinen" : "Negative"} situationType="negative" phrases={visible} pack={pack} />
+        <MoodColumn title={fi ? "Neutraali" : "Neutral"} situationType="neutral" phrases={visible} pack={pack} />
       </div>
     </div>
   );

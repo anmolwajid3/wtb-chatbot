@@ -34,7 +34,11 @@ from app.agents.formatter import run_formatter
 from app.agents.guardrail_check import run_guardrail_check
 from app.agents.response_reviewer import run_response_reviewer
 from app.agents.summarizer import run_summarizer
-from app.db.connection import save_conversation_state, fetch_coaches_by_ids
+from app.db.connection import (
+    fetch_coaches_by_ids,
+    load_conversation_session,
+    save_conversation_state,
+)
 from app.agents.grounding import scrub_profile, strip_empty_template_tokens
 from app.i18n import normalize_locale, reply_language_ok, resolve_locale, t
 
@@ -203,7 +207,7 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
     stops a tampered request from claiming a selection of some other coach
     ID that was never actually presented to this visitor.
     """
-    state = _conversations_in_memory.get(conversation_id)
+    state = _remember(conversation_id)
     if state is None:
         reply = t(None, "conversation_expired")
         return {
@@ -267,6 +271,7 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
         matched_coach_ids=state["matched_coaches"],
         mood_history=state.get("mood_history", []),
         organization_id=state.get("organization_id"),
+        session=_session_payload(state),
     )
 
     return {
@@ -280,7 +285,7 @@ def _handle_coach_selection(conversation_id: str, selected_coach_id: str) -> dic
 
 
 _PRICE_ASK = re.compile(
-    r"\b(price|pricing|cost|how much|fee|fees|charg\w*|hinta|hinnoittelu|maksaa|kustannus|pris|kostar|kostnad)\b",
+    r"\b(price|pricing|cost|how much|fee|fees|charg\w*|hinta|hinnoittelu|maksa\w*|kustannus|paljonko|pris|kostar|kostnad)\b",
     re.I,
 )
 _EMAIL = re.compile(r"[\w.+-]+@[\w.-]+\.\w+")
@@ -318,7 +323,37 @@ _SKIP_OPTIONAL = re.compile(
 
 
 def _locale(state: dict) -> str:
-    return normalize_locale(state.get("locale"))
+    # `locale` is the session language. `reply_locale` is the older key.
+    return normalize_locale(state.get("locale") or state.get("reply_locale"))
+
+
+def _session_payload(state: dict) -> dict:
+    """Fields a later turn needs after this process forgets the conversation."""
+    return {
+        "locale": _locale(state),
+        "coach_selected": bool(state.get("coach_selected")),
+        "matched_coaches": [str(item) for item in (state.get("matched_coaches") or [])],
+        "matched_coach_scores": state.get("matched_coach_scores") or {},
+        "gathered_slots": state.get("gathered_slots") or {},
+        "turn_count": state.get("turn_count") or 0,
+        "detected_mood": state.get("detected_mood") or "neutral",
+        "post_selection_turns": state.get("post_selection_turns") or 0,
+        "awaiting_optional_details": bool(state.get("awaiting_optional_details")),
+        "handoff_complete": bool(state.get("handoff_complete")),
+        "session_closed": bool(state.get("session_closed")),
+        "organization_id": state.get("organization_id"),
+        "outcome": state.get("outcome") or "in_progress",
+    }
+
+
+def _remember(conversation_id: str) -> dict | None:
+    state = _conversations_in_memory.get(conversation_id)
+    if state is not None:
+        return state
+    restored = load_conversation_session(conversation_id)
+    if restored:
+        _conversations_in_memory[conversation_id] = restored
+    return restored
 
 
 def _join_phrases(locale: str, items: list[str]) -> str:
@@ -631,6 +666,7 @@ def _handle_post_selection_message(conversation_id: str, message: str) -> dict:
         matched_coach_ids=state.get("matched_coaches", []),
         mood_history=state.get("mood_history", []),
         organization_id=state.get("organization_id"),
+        session=_session_payload(state),
     )
 
     return {
@@ -655,15 +691,11 @@ def run_turn(
     record: bool = True,
     locale: str | None = None,
 ) -> dict:
-    existing = (
-        _conversations_in_memory.get(conversation_id)
-        if conversation_id
-        else None
-    )
+    existing = _remember(conversation_id) if conversation_id else None
     # URL/session locale, unless the visitor writes Finnish — then stay Finnish.
     locale = resolve_locale(
         requested=locale,
-        session_locale=(existing or {}).get("locale"),
+        session_locale=_locale(existing) if existing else None,
         message=message,
     )
 
@@ -677,13 +709,13 @@ def run_turn(
                 "coach_matches": [],
                 **_empty_debug_fields(),
             }
-        if conversation_id in _conversations_in_memory:
-            _conversations_in_memory[conversation_id]["locale"] = locale
+        if existing:
+            existing["locale"] = locale
         return _handle_coach_selection(conversation_id, selected_coach_id)
 
-    if conversation_id and conversation_id in _conversations_in_memory:
-        _conversations_in_memory[conversation_id]["locale"] = locale
-        if _conversations_in_memory[conversation_id].get("coach_selected"):
+    if existing:
+        existing["locale"] = locale
+        if existing.get("coach_selected"):
             return _handle_post_selection_message(conversation_id, message)
 
     if conversation_id is None or conversation_id not in _conversations_in_memory:
@@ -752,6 +784,7 @@ def run_turn(
             matched_coach_ids=result_state.get("matched_coaches", []),
             mood_history=result_state.get("mood_history", []),
             organization_id=result_state.get("organization_id"),
+            session=_session_payload(result_state),
         )
 
     # Build structured coach match data for the widget's confidence visualization

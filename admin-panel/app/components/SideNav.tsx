@@ -73,7 +73,7 @@ export function SideNav({ links }: { links: SideNavItem[] }) {
             href={link.href}
             className={`flex items-center gap-2.5 rounded-md px-2 py-2 text-sm transition ${
               active
-                ? "bg-neutral-900 text-amber-400"
+                ? "nav-link-active"
                 : "text-neutral-400 hover:bg-neutral-900 hover:text-amber-400"
             }`}
           >

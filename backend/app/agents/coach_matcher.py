@@ -2,15 +2,15 @@
 Coach-Matching Agent.
 
 Deliberately NOT vector/RAG-based (see blueprint Section 9.1): the coach table
-is small enough to pass in full. The model is only allowed to return IDs that
-were present in the verified rows it was given — anything else is rejected.
+is small enough to pass in full. Ranking is deterministic for a given set of
+slots so the same conversation does not flip between 1 and 3 coaches.
 """
 import json
+import re
 
 from pydantic import BaseModel, Field, ValidationError
 from app.agents.grounding import scrub_profile
-from app.llm import get_llm
-from app.db.connection import fetch_active_coaches, fetch_match_settings, get_agent_prompt
+from app.db.connection import fetch_active_coaches, fetch_match_settings
 
 
 class MatchedCoach(BaseModel):
@@ -87,8 +87,106 @@ def _recover_match_result(err: ValidationError) -> MatchResult:
     return MatchResult(matches=[], reasoning="The match list could not be read.")
 
 
+_TOKEN = re.compile(r"[0-9A-Za-zÄÖÅäöå]{3,}")
+
+
+def _tokens(text: str) -> set[str]:
+    return {match.group(0).lower() for match in _TOKEN.finditer(text or "")}
+
+
+def _coach_blob(coach: dict) -> str:
+    parts: list[str] = []
+    for key in (
+        "coach_name",
+        "program_name",
+        "short_description",
+        "long_description",
+        "target_group",
+        "suited_situations",
+        "key_themes",
+        "methods",
+        "keywords",
+        "main_category",
+        "delivery_format",
+        "duration",
+    ):
+        value = coach.get(key)
+        if isinstance(value, list):
+            parts.extend(str(item) for item in value)
+        elif value:
+            parts.append(str(value))
+    return " ".join(parts)
+
+
+def _group_excludes(coach: dict, slots: dict) -> bool:
+    raw = slots.get("group_size")
+    if raw is None or raw == "":
+        return False
+    digits = re.search(r"\d+", str(raw))
+    if not digits:
+        return False
+    size = int(digits.group(0))
+    low = coach.get("group_size_min")
+    high = coach.get("group_size_max")
+    if low is not None and size < int(low):
+        return True
+    if high is not None and size > int(high):
+        return True
+    return False
+
+
+def rank_coaches(
+    candidates: list[dict],
+    slots: dict | None,
+    max_matches: int,
+    min_match_score: int,
+) -> list[MatchedCoach]:
+    """
+    Same slots and the same roster always produce the same top N.
+
+    Scores are a stable rank mapped above the company's minimum, so the
+    threshold cannot shrink the list from one turn to the next.
+    """
+    limit = max(0, int(max_matches))
+    if limit == 0 or not candidates:
+        return []
+    slots = slots or {}
+    need = " ".join(
+        str(slots.get(key) or "")
+        for key in ("theme", "need_description", "timing", "budget", "group_size")
+    )
+    need_tokens = _tokens(need)
+    scored: list[tuple[int, str]] = []
+    for coach in candidates:
+        if _group_excludes(coach, slots):
+            continue
+        coach_id = str(coach.get("id") or "")
+        if not coach_id:
+            continue
+        overlap = len(need_tokens & _tokens(_coach_blob(coach)))
+        scored.append((overlap, coach_id))
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    top = scored[:limit]
+    if not top:
+        return []
+    floor = max(0, min(99, int(min_match_score)))
+    span = max(1, 99 - floor)
+    count = len(top)
+    ranked: list[MatchedCoach] = []
+    for index, (_overlap, coach_id) in enumerate(top):
+        if count == 1:
+            score = min(99, floor + span)
+        else:
+            score = floor + round(span * (count - 1 - index) / (count - 1))
+        ranked.append(MatchedCoach(coach_id=coach_id, match_score=int(score)))
+    return ranked
+
+
 def run_coach_matcher(state: dict) -> dict:
     if not state.get("ready_to_match"):
+        return state
+    # A chosen coach stays chosen. Later turns must not draw a new shortlist.
+    if state.get("coach_selected"):
         return state
 
     candidates = [scrub_profile(row) for row in fetch_active_coaches(state.get("organization_id"))]
@@ -99,50 +197,16 @@ def run_coach_matcher(state: dict) -> dict:
         state["outcome"] = "purchase_order"
         return state
 
-    candidate_ids = {str(c["id"]) for c in candidates}
-
-    llm = get_llm(temperature=0.0, agent_name="coach_matcher", organization_id=state.get("organization_id"))
-    structured_llm = llm.with_structured_output(MatchResult)
-
     slots = state.get("gathered_slots", {})
-    need_summary = (
-        f"Theme: {slots.get('theme')}. "
-        f"Need description: {slots.get('need_description')}. "
-        f"Timing: {slots.get('timing')}. "
-        f"Budget (optional, soft signal only): {slots.get('budget')}. "
-        f"Group size (optional, soft signal unless out of range): {slots.get('group_size')}."
-    )
-
     settings = fetch_match_settings(state.get("organization_id"))
-    prompt_template = get_agent_prompt("coach_matcher", MATCH_SYSTEM_PROMPT_DEFAULT, state.get("organization_id"))
-    try:
-        prompt = prompt_template.format(candidates=candidates, need=need_summary)
-    except (KeyError, IndexError):
-        prompt = MATCH_SYSTEM_PROMPT_DEFAULT.format(candidates=candidates, need=need_summary)
-    prompt += (
-        f"\nReturn at most {settings['max_matches']} matches. "
-        f"Leave out anyone whose match_score is below {settings['min_match_score']}."
+    # Fixed top N from the roster. A model call here used to return 1 coach on
+    # one turn and 3 on the next for the same slots.
+    verified = rank_coaches(
+        candidates,
+        slots,
+        settings["max_matches"],
+        settings["min_match_score"],
     )
-    try:
-        result = structured_llm.invoke([{"role": "system", "content": prompt}])
-    except ValidationError as err:
-        result = _recover_match_result(err)
-    if not isinstance(result, MatchResult):
-        try:
-            result = _match_result_from_payload(result)
-        except (TypeError, ValueError, json.JSONDecodeError, ValidationError):
-            result = None
-        if result is None:
-            result = MatchResult(matches=[], reasoning="The match list could not be read.")
-
-    # Hard safety check: reject any match whose coach_id wasn't actually in the
-    # candidate set. This is the structural anti-hallucination guarantee.
-    verified = [
-        m for m in result.matches
-        if m.coach_id in candidate_ids and m.match_score >= settings["min_match_score"]
-    ]
-    verified.sort(key=lambda m: m.match_score, reverse=True)
-    verified = verified[: settings["max_matches"]]
 
     if not verified:
         state["matched_coaches"] = []

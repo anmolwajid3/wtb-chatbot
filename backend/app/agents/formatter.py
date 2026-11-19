@@ -88,7 +88,7 @@ Conversation so far:
 def _price_question(text: str) -> bool:
     return bool(
         re.search(
-            r"\b(price|pricing|cost|how much|fee|fees|hinta|hinnoittelu|maksaa|kustannus|pris|kostar|kostnad)\b",
+            r"\b(price|pricing|cost|how much|fee|fees|hinta|hinnoittelu|maksa\w*|kustannus|paljonko|pris|kostar|kostnad)\b",
             text,
             re.I,
         )
@@ -376,9 +376,10 @@ def _one_more_detail(
 def run_formatter(state: dict) -> dict:
     latest_user = state["messages"][-1]["content"] if state.get("messages") else ""
     slots = state.get("gathered_slots", {})
+    sticky = state.get("locale") or state.get("reply_locale")
     locale = resolve_locale(
-        state.get("locale"),
-        session_locale=state.get("locale"),
+        sticky,
+        session_locale=sticky,
         message=latest_user,
     )
     state["locale"] = locale

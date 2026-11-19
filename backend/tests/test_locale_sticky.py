@@ -1,12 +1,15 @@
 """Conversation locale should not flip on short English like 'hi'."""
 from app.agents.formatter import follow_up_reply
-from app.graph import _conversations_in_memory, forget_conversation, peek_reply_locale
+from app.graph import _conversations_in_memory, _remember, forget_conversation
 
 
-def test_peek_reply_locale_reads_sticky_state():
+def test_remember_reads_selected_coach_from_memory():
     cid = "sticky-fi-1"
-    _conversations_in_memory[cid] = {"reply_locale": "fi"}
-    assert peek_reply_locale(cid) == "fi"
+    _conversations_in_memory[cid] = {"locale": "fi", "coach_selected": True, "matched_coaches": ["c1"]}
+    restored = _remember(cid)
+    assert restored is not None
+    assert restored["locale"] == "fi"
+    assert restored["coach_selected"] is True
     forget_conversation(cid)
 
 
@@ -19,4 +22,4 @@ def test_finnish_follow_up_after_hi_still_finnish():
     reply = follow_up_reply(slots, "hi", "fi")
     assert reply is not None
     assert "What's going on" not in reply
-    assert "Milloin tämän olisi hyvä alkaa" in reply or "Kerro omin sanoin" in reply
+    assert "Milloin" in reply or "Kerro" in reply

@@ -9,9 +9,8 @@ async function requireEditor() {
   await assertStaff(canEditCompany);
 }
 
-function detectLocale(text: string): "en" | "fi" | "sv" {
+function detectLocale(text: string): "en" | "fi" {
   if (/[äöÄÖ]/.test(text) || /\b(hei|kerro|valmentaja|tiimi|motivaatio)\b/i.test(text)) return "fi";
-  if (/[åÅ]/.test(text) || /\b(hej|berätta|hjälp)\b/i.test(text)) return "sv";
   return "en";
 }
 

@@ -1,15 +1,16 @@
 """
 Visitor-facing copy for hardcoded (non-LLM) replies.
 
-Language starts from the widget URL (`?lang=en|sv|fi`), sent as `locale` on
+Language starts from the widget URL (`?lang=en|fi`), sent as `locale` on
 /chat and /greeting. A session stays on that language, except that Finnish
 writing locks the session to Finnish and it does not flip back.
+Swedish is not offered.
 """
 from __future__ import annotations
 
 import re
 
-SUPPORTED = ("en", "sv", "fi")
+SUPPORTED = ("en", "fi")
 DEFAULT_LOCALE = "en"
 
 # Pack defaults when DB has no locale-scoped greeting.
@@ -17,10 +18,6 @@ DEFAULT_GREETINGS = {
     "en": (
         "Hi! Tell me a bit about what you're looking for — a theme, a situation, "
         "a team size, whatever comes to mind — and I'll help point you to the right fit."
-    ),
-    "sv": (
-        "Hej! Berätta lite om vad du letar efter — ett tema, en situation, "
-        "en gruppstorlek, vad som helst — så hjälper jag dig att hitta rätt."
     ),
     "fi": (
         "Hei! Kerro vähän, mitä etsit — teema, tilanne, ryhmäkoko, mikä vain "
@@ -30,7 +27,6 @@ DEFAULT_GREETINGS = {
 
 LANGUAGE_NAME = {
     "en": "English",
-    "sv": "Swedish",
     "fi": "Finnish",
 }
 
@@ -586,14 +582,12 @@ def resolve_locale(
     """
     session = normalize_locale(session_locale) if session_locale and str(session_locale).strip() else None
     detected = detect_message_locale(message)
+    if detected == "sv":
+        detected = None
     if session == "fi":
         return "fi"
     if detected == "fi":
         return "fi"
-    if session == "sv":
-        return "sv"
-    if detected == "sv":
-        return "sv"
     if session:
         return session
     return normalize_locale(requested)

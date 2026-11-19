@@ -160,6 +160,17 @@ html.dark .aside-shell .hover\:text-amber-400:hover { color: #FFFFFF !important;
 html.light .aside-shell .hover\:bg-neutral-900:hover,
 html.dark .aside-shell .hover\:bg-neutral-900:hover { background-color: #16301C !important; }
 
+/* Selected nav item stays light text on a dark chip in both themes.
+   html.light .bg-neutral-900 paints the chip white, which hid the label. */
+.nav-link-active,
+html.light .aside-shell .nav-link-active,
+html.dark .aside-shell .nav-link-active,
+html.light .nav-link-active,
+html.dark .nav-link-active {
+  background-color: #16301C !important;
+  color: #FFFFFF !important;
+}
+
 input,
 textarea,
 select {

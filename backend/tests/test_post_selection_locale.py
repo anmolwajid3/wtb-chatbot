@@ -8,21 +8,21 @@ from app.graph import (
 
 def test_finnish_selection_reply_asks_for_contact():
     state = {
-        "reply_locale": "fi",
+        "locale": "fi",
         "gathered_slots": {"timing": "noin kuukauden päästä"},
         "matched_coaches": [],
     }
     # No coach row — still must be Finnish, not "Great choice".
     reply, mode = _selection_reply(state, "ok")
     assert mode == "stay"
-    assert "Tarvitsen vielä nimesi ja sähköpostisi" in reply
+    assert "tarvitsen vielä nimesi ja sähköpostiosoitteesi" in reply.lower()
     assert "Great choice" not in reply
     assert "I still need" not in reply
 
 
 def test_finnish_known_fit_sentence():
     state = {
-        "reply_locale": "fi",
+        "locale": "fi",
         "gathered_slots": {"timing": "noin kuukauden päästä", "group_size": 12},
     }
     sentence = _known_fit_sentence(state)
@@ -33,7 +33,7 @@ def test_finnish_known_fit_sentence():
 
 def test_finnish_price_ask_after_selection():
     state = {
-        "reply_locale": "fi",
+        "locale": "fi",
         "gathered_slots": {"timing": "ensi kuussa"},
         "matched_coaches": [],
     }
@@ -45,7 +45,7 @@ def test_finnish_price_ask_after_selection():
 
 def test_finnish_closing_reply():
     state = {
-        "reply_locale": "fi",
+        "locale": "fi",
         "gathered_slots": {"timing": "ensi kuussa"},
         "matched_coaches": [],
     }
@@ -56,7 +56,7 @@ def test_finnish_closing_reply():
 
 def test_english_selection_reply_unchanged():
     state = {
-        "reply_locale": "en",
+        "locale": "en",
         "gathered_slots": {"timing": "next month"},
         "matched_coaches": [],
     }
@@ -71,7 +71,7 @@ def test_finnish_coach_pick_reply(monkeypatch):
     cid = "fi-select-test"
     graph._conversations_in_memory[cid] = {
         "conversation_id": cid,
-        "reply_locale": "fi",
+        "locale": "fi",
         "messages": [],
         "gathered_slots": {"timing": "noin kuukauden päästä"},
         "matched_coaches": ["coach-1"],
@@ -92,6 +92,6 @@ def test_finnish_coach_pick_reply(monkeypatch):
     assert "Hyvä valinta" in reply
     assert "Juhani Virtanen" in reply
     assert "Tiimin motivaatiosprintti" in reply
-    assert "sähköpostisi" in reply
+    assert "sähköposti" in reply
     assert "Great choice" not in reply
     graph.forget_conversation(cid)

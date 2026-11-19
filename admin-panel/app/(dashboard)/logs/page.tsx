@@ -44,7 +44,7 @@ function outcomeTag(outcome: string) {
 export default async function LogsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ outcome?: string; tag?: string; q?: string }>;
+  searchParams: Promise<{ outcome?: string; tag?: string; q?: string; page?: string }>;
 }) {
   const workspace = await getWorkspace();
   const organizationId = workspace?.organization?.id;
@@ -63,6 +63,8 @@ export default async function LogsPage({
   const outcome = params.outcome || "";
   const tag = params.tag || "";
   const q = (params.q || "").trim();
+  const pageSize = 25;
+  const requestedPage = Math.max(1, Number.parseInt(params.page || "1", 10) || 1);
 
   const clauses = ["c.organization_id = $1"];
   const values: unknown[] = [organizationId];
@@ -82,15 +84,27 @@ export default async function LogsPage({
   }
 
   const pool = getPool();
+  const where = clauses.join(" AND ");
+  const countResult = await pool.query(
+    `SELECT count(*)::int AS count
+     FROM conversations c
+     LEFT JOIN quote_requests qr ON qr.conversation_id = c.id
+     WHERE ${where}`,
+    values
+  );
+  const total = Number(countResult.rows[0]?.count || 0);
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(requestedPage, pageCount);
+  const pageValues = [...values, pageSize, (page - 1) * pageSize];
   const result = await pool.query(
     `SELECT c.id, c.started_at, c.outcome, c.matched_coach_ids, c.review_tag,
             (qr.id IS NOT NULL) AS has_quote_request
      FROM conversations c
      LEFT JOIN quote_requests qr ON qr.conversation_id = c.id
-     WHERE ${clauses.join(" AND ")}
+     WHERE ${where}
      ORDER BY c.started_at DESC
-     LIMIT 200`,
-    values
+     LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+    pageValues
   );
   const conversations: ConversationRow[] = result.rows;
 
@@ -108,6 +122,15 @@ export default async function LogsPage({
       abandoned: "keskeytetty",
     };
     return map[value] || value.replace(/_/g, " ");
+  };
+  const pageHref = (nextPage: number) => {
+    const qs = new URLSearchParams();
+    if (q) qs.set("q", q);
+    if (outcome) qs.set("outcome", outcome);
+    if (tag) qs.set("tag", tag);
+    if (nextPage > 1) qs.set("page", String(nextPage));
+    const query = qs.toString();
+    return query ? `/logs?${query}` : "/logs";
   };
 
   return (
@@ -217,6 +240,29 @@ export default async function LogsPage({
             )}
           </tbody>
         </table>
+      </div>
+      <div className="mt-4 flex items-center justify-between text-sm text-neutral-400">
+        <p>
+          {fi
+            ? `Sivu ${page} / ${pageCount} · ${total} keskustelua`
+            : `Page ${page} of ${pageCount} · ${total} conversations`}
+        </p>
+        <div className="flex gap-3">
+          {page > 1 ? (
+            <Link href={pageHref(page - 1)} className="text-neutral-200 hover:underline">
+              {fi ? "Edellinen" : "Previous"}
+            </Link>
+          ) : (
+            <span className="text-neutral-600">{fi ? "Edellinen" : "Previous"}</span>
+          )}
+          {page < pageCount ? (
+            <Link href={pageHref(page + 1)} className="text-neutral-200 hover:underline">
+              {fi ? "Seuraava" : "Next"}
+            </Link>
+          ) : (
+            <span className="text-neutral-600">{fi ? "Seuraava" : "Next"}</span>
+          )}
+        </div>
       </div>
     </div>
   );

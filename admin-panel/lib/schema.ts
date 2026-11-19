@@ -127,6 +127,7 @@ END $$`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS widget_theme TEXT NOT NULL DEFAULT 'dark'`,
   `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS widget_accent TEXT NOT NULL DEFAULT '#FFFFFF'`,
   `ALTER TABLE conversations ADD COLUMN IF NOT EXISTS review_tag TEXT`,
+  `ALTER TABLE conversations ADD COLUMN IF NOT EXISTS session_json JSONB`,
   `ALTER TABLE profile_fields ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true`,
   `CREATE UNIQUE INDEX IF NOT EXISTS quote_requests_conversation_id_uidx ON quote_requests (conversation_id)`,
   `CREATE TABLE IF NOT EXISTS profile_sections (

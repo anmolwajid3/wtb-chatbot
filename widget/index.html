@@ -423,6 +423,8 @@
     margin-top: 4px;
   }
   .coach-graph-wrap svg { display: block; width: 100%; height: auto; }
+  .coach-graph-name { fill: #F4F7F2; }
+  body.light .coach-graph-name { fill: #122018; }
 
   .coach-clickable, .coach-node-clickable { cursor: pointer; }
   .coach-clickable:hover { border-color: var(--amber); }
@@ -603,7 +605,6 @@
 <div class="demo-tools">
   <div role="group" aria-label="Language">
     <button type="button" data-lang="en">EN</button>
-    <button type="button" data-lang="sv">SV</button>
     <button type="button" data-lang="fi">FI</button>
   </div>
   <button type="button" id="theme-toggle">Light</button>
@@ -667,7 +668,7 @@
   const pageParams = new URLSearchParams(location.search);
   const companySlug = pageParams.get('company') || '';
   // URL ?lang= (or ?locale=) is authoritative for the whole chat session.
-  const SUPPORTED_LANGS = ['en', 'sv', 'fi'];
+  const SUPPORTED_LANGS = ['en', 'fi'];
   const COPY = {
     en: {
       kicker: 'Opas',
@@ -685,23 +686,8 @@
       errorSelect: "Couldn't complete that selection just now — please try again.",
       themeToLight: 'Light',
       themeToDark: 'Dark',
-    },
-    sv: {
-      kicker: 'Opas',
-      title: 'Hitta rätt<br>vägledare för teamet',
-      line1: 'Berätta kort om situationen ni vill ha hjälp med.',
-      line2: 'Assistenten ställer ett par frågor och pekar mot en passande profil.',
-      note: 'Lägg till ?company=ert-namn för att prata med ett företag.',
-      brand: 'Opas',
-      status: 'Svarar oftast inom några sekunder',
-      placeholder: 'Beskriv vad du letar efter...',
-      select: 'Välj den här',
-      selecting: 'Väljer...',
-      greeting: 'Hej! Berätta lite om vad du letar efter, så hjälper jag dig att hitta rätt.',
-      errorSend: 'Assistenten gick inte att nå just nu. Kontrollera att servern körs och försök igen.',
-      errorSelect: 'Valet gick inte att slutföra just nu. Försök igen.',
-      themeToLight: 'Ljust',
-      themeToDark: 'Mörkt',
+      you: 'You',
+      matchWord: 'match',
     },
     fi: {
       kicker: 'Opas',
@@ -719,6 +705,8 @@
       errorSelect: 'Valintaa ei saatu valmiiksi. Yritä uudelleen.',
       themeToLight: 'Vaalea',
       themeToDark: 'Tumma',
+      you: 'Sinä',
+      matchWord: 'osuma',
     },
   };
 
@@ -735,8 +723,9 @@
     return SUPPORTED_LANGS.includes(raw) ? raw : '';
   }
   const urlLang = readUrlLang();
+  const cookieLang = readCookie('harbor_locale');
   let locale = urlLang
-    || (SUPPORTED_LANGS.includes(readCookie('harbor_locale')) ? readCookie('harbor_locale') : 'en');
+    || (SUPPORTED_LANGS.includes(cookieLang) ? cookieLang : 'en');
   if (urlLang) {
     writeCookie('harbor_locale', locale);
   } else {
@@ -1028,7 +1017,7 @@
         '" stroke="' + hex + '" stroke-width="2" marker-end="url(#graph-arrow-' + markerIdx + ')" />';
 
       labels += '<text x="' + midX + '" y="' + (midY - 9) + '" fill="' + hex + '" font-size="11" font-weight="600" ' +
-        'text-anchor="middle" font-family="Inter, sans-serif">' + score + '% match</text>';
+        'text-anchor="middle" font-family="Inter, sans-serif">' + score + '% ' + escapeXml(copy().matchWord) + '</text>';
 
       let nodeVisual;
       if (coach.image_url) {
@@ -1048,7 +1037,7 @@
       if (name.length > 15) name = name.slice(0, 14) + '\u2026';
       coachNodes += '<g class="coach-node-clickable" data-coach-index="' + i + '">' +
         nodeVisual +
-        '<text x="' + coachX + '" y="' + (coachY + nodeRadius + 15) + '" fill="#F3EFE6" font-size="11" ' +
+        '<text class="coach-graph-name" x="' + coachX + '" y="' + (coachY + nodeRadius + 15) + '" font-size="11" ' +
         'text-anchor="middle" font-family="Inter, sans-serif">' + escapeXml(name) + '</text>' +
         '</g>';
     });
@@ -1056,7 +1045,7 @@
     const userNode =
       '<circle cx="' + userX + '" cy="' + userY + '" r="' + nodeRadius + '" fill="#141414" stroke="#EFA33B" stroke-width="2" />' +
       '<text x="' + userX + '" y="' + (userY + 5) + '" fill="#EFA33B" font-size="10.5" font-weight="600" ' +
-      'text-anchor="middle" font-family="Inter, sans-serif">You</text>';
+      'text-anchor="middle" font-family="Inter, sans-serif">' + escapeXml(copy().you) + '</text>';
 
     return '<svg viewBox="0 0 ' + width + ' ' + height + '" xmlns="http://www.w3.org/2000/svg">' +
       defs + lines + labels + userNode + coachNodes + '</svg>';
@@ -1111,7 +1100,7 @@
           '<p class="coach-desc"></p>' +
           '<div class="match-row">' +
             '<div class="match-bar-track"><div class="match-bar-fill" style="width:' + score + '%; background:' + color + '"></div></div>' +
-            '<span class="match-score-label">' + score + '% match</span>' +
+            '<span class="match-score-label">' + score + '% ' + copy().matchWord + '</span>' +
           '</div>' +
         '</div>';
 
@@ -1242,7 +1231,7 @@
     const color = scoreTierColor(score);
     detailMatchRow.innerHTML =
       '<div class="match-bar-track"><div class="match-bar-fill" style="width:' + score + '%; background:' + color + '"></div></div>' +
-      '<span class="match-score-label">' + score + '% match</span>';
+      '<span class="match-score-label">' + score + '% ' + copy().matchWord + '</span>';
 
     detailSelectBtn.disabled = false;
     detailSelectBtn.textContent = copy().select;
