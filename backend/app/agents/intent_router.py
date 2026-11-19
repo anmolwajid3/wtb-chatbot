@@ -184,43 +184,50 @@ def run_intent_router(state: dict) -> dict:
         and not _still_needs_the_agent(latest_message, found_timing, slots)
     )
     if not understood_locally:
-        llm = get_llm(temperature=0.0, agent_name="intent_router", organization_id=state.get("organization_id"))
-        structured_llm = llm.with_structured_output(IntakeExtraction)
-        recent = "\n".join(
-            f"{m['role']}: {_clean_message(m['content'])}" for m in state["messages"][-6:]
-        )
-        system_prompt = get_agent_prompt("intent_router", INTAKE_SYSTEM_PROMPT_DEFAULT, state.get("organization_id"))
-        system_prompt += (
-            "\n\nA description of a team or work problem is both the theme and the need, "
-            "even with no date attached. Do not leave theme or need_description empty when "
-            "the visitor describes what is going on. A price question by itself fills neither. "
-            "A request for medical or legal advice is off topic: set is_off_topic=true and "
-            "leave theme, timing, and need_description null."
-        )
-        result: IntakeExtraction = structured_llm.invoke(
-            [
-                {"role": "system","content": system_prompt},
-                {"role": "user", "content": recent},
-            ]
-        )
+        result = None
+        try:
+            llm = get_llm(temperature=0.0, agent_name="intent_router", organization_id=state.get("organization_id"))
+            structured_llm = llm.with_structured_output(IntakeExtraction)
+            recent = "\n".join(
+                f"{m['role']}: {_clean_message(m['content'])}" for m in state["messages"][-6:]
+            )
+            system_prompt = get_agent_prompt("intent_router", INTAKE_SYSTEM_PROMPT_DEFAULT, state.get("organization_id"))
+            system_prompt += (
+                "\n\nA description of a team or work problem is both the theme and the need, "
+                "even with no date attached. Do not leave theme or need_description empty when "
+                "the visitor describes what is going on. A price question by itself fills neither. "
+                "A request for medical or legal advice is off topic: set is_off_topic=true and "
+                "leave theme, timing, and need_description null."
+            )
+            result = structured_llm.invoke(
+                [
+                    {"role": "system","content": system_prompt},
+                    {"role": "user", "content": recent},
+                ]
+            )
+        except Exception:
+            # A slow or failed intake call must not hang the turn. Slots
+            # already filled locally still stand; this is not treated as spam.
+            result = None
 
-        if result.is_spam:
+        if result is not None and result.is_spam:
             state["outcome"] = "spam"
             return state
 
-        state["off_topic_this_turn"] = result.is_off_topic
-        if not result.is_off_topic:
-            if result.theme and not slots.get("theme"):
-                slots["theme"] = result.theme
-            if result.timing and not slots.get("timing"):
-                slots["timing"] = result.timing
-            if result.budget and not slots.get("budget"):
-                slots["budget"] = result.budget
-            if result.group_size and not slots.get("group_size"):
-                slots["group_size"] = result.group_size
-            if result.need_description:
-                existing = slots.get("need_description", "")
-                slots["need_description"] = f"{existing} {result.need_description}".strip()
+        if result is not None:
+            state["off_topic_this_turn"] = result.is_off_topic
+            if not result.is_off_topic:
+                if result.theme and not slots.get("theme"):
+                    slots["theme"] = result.theme
+                if result.timing and not slots.get("timing"):
+                    slots["timing"] = result.timing
+                if result.budget and not slots.get("budget"):
+                    slots["budget"] = result.budget
+                if result.group_size and not slots.get("group_size"):
+                    slots["group_size"] = result.group_size
+                if result.need_description:
+                    existing = slots.get("need_description", "")
+                    slots["need_description"] = f"{existing} {result.need_description}".strip()
 
     prior_assistant = [
         m.get("content") or ""

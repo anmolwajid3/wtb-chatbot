@@ -81,6 +81,8 @@ def get_llm(temperature: float = 0.0, agent_name: str = "unknown", organization_
         base_url=base_url,
         model=model,
         temperature=temperature,
+        timeout=25,
+        max_retries=0,
         callbacks=[handler],
         extra_body={"usage": {"include": True}},  # ask OpenRouter to include real per-call cost
     )
