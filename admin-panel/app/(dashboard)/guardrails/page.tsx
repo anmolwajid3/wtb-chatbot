@@ -21,7 +21,13 @@ async function getGuardrails(organizationId: string | null): Promise<Guardrail[]
     : await pool.query(
         `SELECT * FROM guardrails WHERE organization_id IS NULL ORDER BY category, rule_text`
       );
-  return result.rows;
+  const seen = new Set<string>();
+  return result.rows.filter((row: Guardrail) => {
+    const key = row.rule_text.trim().toLowerCase().replace(/\s+/g, " ");
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 async function addGuardrail(rule_text: string, category: string) {

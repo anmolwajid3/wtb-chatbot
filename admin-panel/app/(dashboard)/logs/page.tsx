@@ -203,7 +203,7 @@ export default async function LogsPage({
                   <form action={setConversationTag} className="inline-flex items-center gap-2">
                     <input type="hidden" name="id" value={c.id} />
                     <TagSelect
-                      name="review_tag"
+                      conversationId={c.id}
                       defaultValue={c.review_tag || ""}
                       className="bg-black border border-neutral-700 rounded-md px-2 py-1 text-xs text-neutral-200"
                     >

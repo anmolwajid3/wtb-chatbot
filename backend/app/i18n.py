@@ -454,6 +454,22 @@ _STRINGS: dict[str, dict[str, str]] = {
         "sv": " ({score}% match)",
         "fi": " ({score} % osuma)",
     },
+    "match_program_line": {
+        "en": "**{program}** with **{name}**",
+        "fi": "**{program}**, valmentajana **{name}**",
+    },
+    "match_duration": {
+        "en": "Duration: {duration}.",
+        "fi": "Kesto: {duration}.",
+    },
+    "match_format": {
+        "en": "Format: {delivery}.",
+        "fi": "Toteutus: {delivery}.",
+    },
+    "match_blurb_fallback": {
+        "en": "A coaching program for this situation.",
+        "fi": "Valmennusohjelma tähän tilanteeseen.",
+    },
     "no_match_handoff": {
         "en": (
             "I don't have an automatic fit for that yet, so I'll pass this on to the "
@@ -516,8 +532,17 @@ _EN_LEAK = re.compile(
     r"\b("
     r"tell me a bit|that gives me a real picture|when would you want|"
     r"before i suggest anyone|great choice|could i get your name|"
-    r"i still need your name and email|i can't tell you what"
+    r"i still need your name and email|i can't tell you what|"
+    r"the team will|i'll pass that|i'll add that"
     r")\b",
+    re.IGNORECASE,
+)
+# English prose pasted into a Finnish reply (program blurbs, "with **Name**").
+_EN_PROSE = re.compile(
+    r"\b(?:a|an|the)\s+(?:structured|strong|week|coaching|program|fit|first)\b"
+    r"|\bstructured\b"
+    r"|\bwith\s+\*\*"
+    r"|\b\d+\s*-?\s*weeks?\b",
     re.IGNORECASE,
 )
 _LANGUAGE_SWITCH = re.compile(
@@ -550,13 +575,18 @@ def is_language_switch(message: str | None) -> bool:
     return bool(_LANGUAGE_SWITCH.match(message or ""))
 
 
+def english_prose(text: str | None) -> bool:
+    """True when a blurb is an English sentence rather than a name or a Finnish line."""
+    return bool(_EN_PROSE.search(text or ""))
+
+
 def reply_language_ok(reply: str | None, locale: str | None) -> bool:
-    """A Finnish or Swedish reply must not carry the English stock lines."""
+    """A Finnish reply must not carry English stock lines or English program prose."""
     text = reply or ""
     loc = normalize_locale(locale)
     detected = detect_message_locale(text)
     if loc == "fi":
-        if _EN_LEAK.search(text):
+        if _EN_LEAK.search(text) or _EN_PROSE.search(text):
             return False
         if detected == "sv":
             return False

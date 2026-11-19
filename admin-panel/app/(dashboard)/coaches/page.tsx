@@ -179,7 +179,7 @@ export default async function CoachesPage({
                   <td className="px-4 py-3 text-neutral-400">{coach.program_name}</td>
                   <td className="px-4 py-3 text-neutral-400">{coach.main_category}</td>
                   <td className="px-4 py-3">
-                    <span className={`tag ${coach.is_active ? "tag-active" : "tag-muted"}`}>
+                    <span className={`tag ${coach.is_active ? "status-pill-active" : "tag-muted"}`}>
                       {coach.is_active ? "Active" : "Inactive"}
                     </span>
                   </td>

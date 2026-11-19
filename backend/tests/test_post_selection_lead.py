@@ -98,7 +98,8 @@ def test_transcript_path_never_reasks_after_handoff():
         assert _conversations_in_memory[conv_id]["session_closed"] is True
 
         r4 = _handle_post_selection_message(conv_id, "bye")
-        assert r4["reply"] == ""
+        assert r4["reply"].strip()
+        assert "take care" in r4["reply"].lower() or "glad" in r4["reply"].lower()
         assert _conversations_in_memory[conv_id]["session_closed"] is True
 
 
@@ -123,7 +124,7 @@ def test_okay_during_optional_details_closes_without_reask():
 
 
 def test_ok_then_bye_after_handoff_ends_session():
-    """Production transcript: handoff → ok (one goodbye) → bye (silence)."""
+    """Handoff → ok, then bye still gets a short goodbye."""
     conv_id = "conv-lead-3"
     _conversations_in_memory[conv_id] = _state(
         gathered_slots={
@@ -147,9 +148,56 @@ def test_ok_then_bye_after_handoff_ends_session():
         assert _conversations_in_memory[conv_id]["session_closed"] is True
 
         r_bye = _handle_post_selection_message(conv_id, "bye")
-        assert r_bye["reply"] == ""
-        # No second assistant bubble recorded for silence.
+        assert r_bye["reply"].strip()
+        assert "take care" in r_bye["reply"].lower() or "glad" in r_bye["reply"].lower()
         assistant_msgs = [
             m for m in _conversations_in_memory[conv_id]["messages"] if m["role"] == "assistant"
         ]
-        assert len(assistant_msgs) == 1
+        assert len(assistant_msgs) == 2
+
+
+def test_heippa_after_close_still_replies_in_finnish():
+    conv_id = "conv-heippa"
+    _conversations_in_memory[conv_id] = _state(
+        locale="fi",
+        handoff_complete=True,
+        session_closed=True,
+        gathered_slots={"theme": "motivaatio", "contact": "a@b.fi"},
+    )
+    with (
+        patch("app.graph._selected_coach", return_value=COACH),
+        patch("app.graph.save_conversation_state"),
+    ):
+        result = _handle_post_selection_message(conv_id, "heippa")
+    assert result["reply"].strip()
+    assert "hei hei" in result["reply"].lower() or "tiimi" in result["reply"].lower()
+    assert "take care" not in result["reply"].lower()
+
+
+def test_medical_and_legal_are_not_forwarded_as_a_team_note():
+    conv_id = "conv-advice"
+    _conversations_in_memory[conv_id] = _state(
+        locale="fi",
+        awaiting_optional_details=True,
+        handoff_complete=False,
+        gathered_slots={"theme": "motivaatio", "need_description": "tiimi", "contact": "a@b.fi"},
+    )
+    with (
+        patch("app.graph._selected_coach", return_value=COACH),
+        patch("app.graph.save_conversation_state"),
+        patch("app.graph.run_summarizer", side_effect=AssertionError("medical note was summarized")),
+    ):
+        medical = _handle_post_selection_message(
+            conv_id, "Voisitko suositella jotain hyvää lääkettä närästykseen?"
+        )
+        legal = _handle_post_selection_message(conv_id, "Tarvitsen oikeudellista neuvontaa.")
+        bye = _handle_post_selection_message(conv_id, "heippa")
+    for reply in (medical["reply"], legal["reply"], bye["reply"]):
+        assert reply.strip()
+        assert "välitän" not in reply.lower()
+        assert "lisään" not in reply.lower()
+        assert "pass that along" not in reply.lower()
+    assert "lääketieteellistä" in medical["reply"].lower() or "juridista" in medical["reply"].lower()
+    assert "näräst" not in medical["reply"].lower()
+    assert "oikeudellista neuvontaa" not in legal["reply"].lower() or "en voi" in legal["reply"].lower()
+    assert bye["reply"].strip()

@@ -32,11 +32,12 @@ ADVICE_REQUEST = re.compile(
     r"|\b(?:employment|labour|labor|tax|immigration)\s+law\b"
     r"|\bwhat\s+does\b[\s\S]{0,60}\blaw\b"
     r"|\blegal\s+(?:advice|opinion|question|rights?)\b"
-    # Finnish: työlainsäädäntö / juridinen / lääketieteellinen …
+    # Finnish: työlainsäädäntö / juridinen / lääketieteellinen / a medicine ask …
     r"|työlainsäädänn?ö\w*|työlaki\w*|lainsäädänn?ö\w*"
-    r"|juridista\b|juridisen\b|juridinen\b|oikeudellista\b|oikeudellinen\b"
-    r"|lääketieteellistä\b|lääketieteellinen\b|lääketieteell\w*"
-    r"|lääkärin?\b|diagnoos\w*|resept\w*|asianajaj\w*"
+    r"|juridista\b|juridisen\b|juridinen\b|oikeudell\w*"
+    r"|lääketieteell\w*|lääkärin?\b|lääk\w*|laak\w*"
+    r"|näräst\w*|narast\w*|särkylääk\w*|ibuprofeen\w*"
+    r"|diagnoos\w*|resept\w*|asianajaj\w*"
     r"|mitä\b[\s\S]{0,80}\b(?:laki|lainsäädäntö|työlaki|työlainsäädäntö)\b"
     # Swedish
     r"|juridisk\w*|medicinsk\w*|arbetsrätt\w*|lagstiftning\w*",
@@ -49,20 +50,52 @@ def _medical_legal_rule(rules: list[dict]) -> str | None:
         category = (rule.get("category") or "").lower()
         text = rule.get("rule_text") or ""
         lowered = text.lower()
-        if category == "medical-legal" or "medical" in lowered or "legal advice" in lowered:
+        if (
+            category == "medical-legal"
+            or "medical" in lowered
+            or "legal advice" in lowered
+            or "lääketieteell" in lowered
+            or "oikeudell" in lowered
+        ):
             return text
     return None
 
 
+def is_advice_request(text: str) -> bool:
+    """Medical or legal ask. Does not need the database, so a closed chat can still refuse."""
+    return bool(ADVICE_REQUEST.search(text or ""))
+
+
+def collapse_repeated_text(text: str) -> str:
+    """Keep each guardrail sentence once. Re-seeds used to paste the same rule many times."""
+    seen: set[str] = set()
+    kept: list[str] = []
+    for chunk in re.split(r"(\n+)", text or ""):
+        if chunk.startswith("\n") or not chunk.strip():
+            kept.append(chunk)
+            continue
+        pieces = re.split(r"(?<=[.!?])\s+", chunk.strip())
+        fresh: list[str] = []
+        for piece in pieces:
+            key = re.sub(r"\s+", " ", piece.strip().lower())
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            fresh.append(piece.strip())
+        if fresh:
+            kept.append(" ".join(fresh))
+    return "".join(kept).strip()
+
+
 def visitor_advice_rule(text: str, organization_id: str | None) -> str | None:
     """The active medical/legal rule, when this message is asking for that advice."""
-    if not ADVICE_REQUEST.search(text or ""):
+    if not is_advice_request(text):
         return None
     try:
         rules = fetch_active_guardrails(organization_id)
     except Exception:
         rules = [{"rule_text": "Never give medical or legal advice.", "category": "medical-legal"}]
-    return _medical_legal_rule(rules)
+    return _medical_legal_rule(rules) or "Never give medical or legal advice."
 
 
 class GuardrailCheckResult(BaseModel):
@@ -156,6 +189,7 @@ def run_guardrail_check(state: dict) -> dict:
         "\n\nA reply that offers a quote request without stating an amount or a range "
         "does not violate the pricing rule."
     )
+    prompt = collapse_repeated_text(prompt)
     result: GuardrailCheckResult = structured_llm.invoke([{"role": "system", "content": prompt}])
 
     state["guardrail_regex_flagged"] = regex_flagged

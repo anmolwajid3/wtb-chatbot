@@ -88,10 +88,36 @@ def _recover_match_result(err: ValidationError) -> MatchResult:
 
 
 _TOKEN = re.compile(r"[0-9A-Za-zÄÖÅäöå]{3,}")
+# Same need in Finnish or English must hit the same coaches.
+_FOLD_PREFIXES = (
+    ("motiv", "motivation"),
+    ("tiim", "team"),
+    ("team", "team"),
+    ("joht", "leadership"),
+    ("leader", "leadership"),
+    ("manag", "manager"),
+    ("esimie", "manager"),
+    ("myynt", "sales"),
+    ("sale", "sales"),
+    ("viest", "communication"),
+    ("communic", "communication"),
+    ("hyvinv", "wellbeing"),
+    ("jaksam", "wellbeing"),
+    ("uupum", "wellbeing"),
+    ("burnout", "wellbeing"),
+    ("wellb", "wellbeing"),
+)
+
+
+def _fold(token: str) -> str:
+    for prefix, canon in _FOLD_PREFIXES:
+        if token.startswith(prefix):
+            return canon
+    return token
 
 
 def _tokens(text: str) -> set[str]:
-    return {match.group(0).lower() for match in _TOKEN.finditer(text or "")}
+    return {_fold(match.group(0).lower()) for match in _TOKEN.finditer(text or "")}
 
 
 def _coach_blob(coach: dict) -> str:
@@ -151,9 +177,11 @@ def rank_coaches(
     if limit == 0 or not candidates:
         return []
     slots = slots or {}
+    # Timing and budget do not change who fits the need. Ranking on them
+    # made the same team problem return a different shortlist.
     need = " ".join(
         str(slots.get(key) or "")
-        for key in ("theme", "need_description", "timing", "budget", "group_size")
+        for key in ("theme", "need_description")
     )
     need_tokens = _tokens(need)
     scored: list[tuple[int, str]] = []
@@ -187,6 +215,10 @@ def run_coach_matcher(state: dict) -> dict:
         return state
     # A chosen coach stays chosen. Later turns must not draw a new shortlist.
     if state.get("coach_selected"):
+        return state
+    # The shortlist is fixed for this conversation. A later turn must not
+    # swap in a different count or a different set of coaches.
+    if state.get("matched_coaches"):
         return state
 
     candidates = [scrub_profile(row) for row in fetch_active_coaches(state.get("organization_id"))]

@@ -12,7 +12,7 @@ type MoodEntry = { turn: number; mood: string };
 async function getConversation(id: string, organizationId: string) {
   const pool = getPool();
   const result = await pool.query(
-    `SELECT id, started_at, transcript_json, outcome, matched_coach_ids, mood_history, review_tag
+    `SELECT id, started_at, transcript_json, outcome, matched_coach_ids, mood_history, review_tag, session_json
      FROM conversations WHERE id = $1 AND organization_id = $2`,
     [id, organizationId]
   );
@@ -109,40 +109,48 @@ function outcomeLabel(outcome: string, locale: string) {
   return mapFi[outcome] || outcome.replace(/_/g, " ");
 }
 
-function renderQuoteSummary(summaryText: string, labels: ReturnType<typeof copyFor>) {
+function renderQuoteSummary(
+  summaryText: string,
+  labels: ReturnType<typeof copyFor>,
+  sessionLocale: string,
+) {
   try {
-    const parsed: StructuredSummary = JSON.parse(summaryText);
-    if (parsed && typeof parsed === "object" && parsed.need_summary) {
+    const parsed = JSON.parse(summaryText) as StructuredSummary & {
+      locale?: string;
+      by_locale?: Record<string, StructuredSummary>;
+    };
+    const pack = parsed?.by_locale?.[sessionLocale] || parsed?.by_locale?.[parsed.locale || ""] || parsed;
+    if (pack && typeof pack === "object" && pack.need_summary) {
       return (
         <div className="space-y-3">
-          <p className="text-sm text-neutral-200">{parsed.need_summary}</p>
+          <p className="text-sm text-neutral-200">{pack.need_summary}</p>
 
-          {parsed.key_details && parsed.key_details.length > 0 && (
+          {pack.key_details && pack.key_details.length > 0 && (
             <div>
               <p className="text-xs uppercase tracking-wide text-neutral-500 mb-1">{labels.keyDetails}</p>
               <ul className="text-sm text-neutral-300 list-disc list-inside space-y-0.5">
-                {parsed.key_details.map((d, i) => (
+                {pack.key_details.map((d, i) => (
                   <li key={i}>{d}</li>
                 ))}
               </ul>
             </div>
           )}
 
-          {parsed.open_questions && parsed.open_questions.length > 0 && (
+          {pack.open_questions && pack.open_questions.length > 0 && (
             <div>
               <p className="text-xs uppercase tracking-wide text-amber-500 mb-1">{labels.stillConfirm}</p>
               <ul className="text-sm text-neutral-300 list-disc list-inside space-y-0.5">
-                {parsed.open_questions.map((q, i) => (
+                {pack.open_questions.map((q, i) => (
                   <li key={i}>{q}</li>
                 ))}
               </ul>
             </div>
           )}
 
-          {parsed.next_step && (
+          {pack.next_step && (
             <div>
               <p className="text-xs uppercase tracking-wide text-neutral-500 mb-1">{labels.nextStep}</p>
-              <p className="text-sm text-neutral-100 font-medium">{parsed.next_step}</p>
+              <p className="text-sm text-neutral-100 font-medium">{pack.next_step}</p>
             </div>
           )}
         </div>
@@ -168,6 +176,11 @@ export default async function ConversationDetailPage({ params }: { params: Promi
   const transcript: TranscriptMessage[] = conversation.transcript_json || [];
   const moodHistory: MoodEntry[] = conversation.mood_history || [];
   const dateLocale = locale === "fi" ? "fi-FI" : "en-GB";
+  const sessionRaw = conversation.session_json;
+  const sessionLocale =
+    sessionRaw && typeof sessionRaw === "object" && (sessionRaw.locale === "fi" || sessionRaw.locale === "en")
+      ? sessionRaw.locale
+      : locale;
 
   return (
     <div className="max-w-4xl mx-auto p-8">
@@ -212,7 +225,7 @@ export default async function ConversationDetailPage({ params }: { params: Promi
           <h3 className="text-sm font-medium text-amber-400 mb-3">
             {quoteRequest.is_purchase_order ? labels.purchase : labels.quote}
           </h3>
-          {renderQuoteSummary(quoteRequest.summary_text, labels)}
+          {renderQuoteSummary(quoteRequest.summary_text, labels, sessionLocale)}
           <p className="text-xs text-neutral-500 mt-3">
             {labels.contact}: {quoteRequest.contact_info || labels.notProvided}
           </p>

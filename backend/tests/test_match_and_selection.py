@@ -85,6 +85,28 @@ def test_selected_coach_persists_on_later_turn():
     forget_conversation(conv)
 
 
+def test_same_need_in_finnish_and_english_returns_the_same_coaches():
+    english = {"theme": "team motivation", "need_description": "the team lost motivation", "timing": "next month"}
+    finnish = {
+        "theme": "tiimin motivaatio",
+        "need_description": "Tiimini on menettänyt motivaationsa",
+        "timing": "kuukauden päästä",
+    }
+    first = rank_coaches(COACHES, english, max_matches=3, min_match_score=50)
+    second = rank_coaches(list(reversed(COACHES)), finnish, max_matches=3, min_match_score=80)
+    assert len(first) == 3
+    assert [item.coach_id for item in first] == [item.coach_id for item in second]
+    assert first[0].coach_id == "c-juhani"
+
+
+def test_zero_overlap_still_returns_the_full_top_n():
+    slots = {"theme": "zzzz", "need_description": "qqqq"}
+    ranked = rank_coaches(COACHES, slots, max_matches=3, min_match_score=90)
+    assert len(ranked) == 3
+    again = rank_coaches(list(reversed(COACHES)), slots, max_matches=3, min_match_score=10)
+    assert [item.coach_id for item in ranked] == [item.coach_id for item in again]
+
+
 def test_language_lists_are_english_and_finnish_only():
     assert "sv" not in SUPPORTED
     assert set(SUPPORTED) == {"en", "fi"}

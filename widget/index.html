@@ -218,11 +218,38 @@
     align-items: center;
     justify-content: space-between;
   }
-  #panel-header .title-block { display: flex; flex-direction: column; gap: 6px; }
+  #panel-header .title-block {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 0;
+  }
   #panel-header .brand-logo {
     height: 32px;
     width: auto;
+    max-width: 180px;
+    object-fit: contain;
+    object-position: left center;
+    align-self: flex-start;
     display: block;
+  }
+  #panel-tools { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+  #panel-lang { display: flex; gap: 4px; }
+  #panel-lang button {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--cream-soft);
+    border-radius: 999px;
+    padding: 4px 8px;
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  #panel-lang button[aria-pressed="true"] {
+    background: var(--amber);
+    color: var(--on-accent);
+    border-color: var(--amber);
   }
   #panel-header .brand-name {
     font-family: 'Oswald', sans-serif;
@@ -632,12 +659,18 @@
       <span id="panel-name" class="brand-name" hidden></span>
       <span class="status-pill"><span class="status-dot"></span><span id="panel-status">Usually replies in a few seconds</span></span>
     </div>
-    <button id="fullscreen-btn" aria-label="Expand to full screen">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-    </button>
-    <button id="close-btn" aria-label="Close chat">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-    </button>
+    <div id="panel-tools">
+      <div id="panel-lang" role="group" aria-label="Chat language">
+        <button type="button" data-lang="en">EN</button>
+        <button type="button" data-lang="fi">FI</button>
+      </div>
+      <button id="fullscreen-btn" aria-label="Expand to full screen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+      </button>
+      <button id="close-btn" aria-label="Close chat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
   </div>
   <div id="messages"></div>
 
@@ -669,6 +702,7 @@
   const companySlug = pageParams.get('company') || '';
   // URL ?lang= (or ?locale=) is authoritative for the whole chat session.
   const SUPPORTED_LANGS = ['en', 'fi'];
+  const LANG_LABELS = { en: 'EN', fi: 'FI' };
   const COPY = {
     en: {
       kicker: 'Opas',
@@ -772,7 +806,6 @@
     if (companyBrand && label) {
       const titles = {
         en: 'Find the right<br>' + label.toLowerCase(),
-        sv: 'Hitta rätt<br>' + label.toLowerCase(),
         fi: 'Löydä oikea<br>' + label.toLowerCase(),
       };
       document.getElementById('demo-title').innerHTML = titles[locale] || titles.en;
@@ -826,7 +859,9 @@
     if (!detailSelectBtn.disabled) detailSelectBtn.textContent = text.select;
     document.getElementById('theme-toggle').textContent = theme === 'light' ? text.themeToDark : text.themeToLight;
     document.querySelectorAll('[data-lang]').forEach((button) => {
-      button.setAttribute('aria-pressed', button.getAttribute('data-lang') === locale ? 'true' : 'false');
+      const code = button.getAttribute('data-lang');
+      if (LANG_LABELS[code]) button.textContent = LANG_LABELS[code];
+      button.setAttribute('aria-pressed', code === locale ? 'true' : 'false');
     });
   }
 

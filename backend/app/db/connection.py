@@ -116,6 +116,7 @@ def fetch_active_coaches(organization_id: str | None = None) -> list[dict]:
             if organization_id:
                 sql += " AND organization_id = %s"
                 params.append(organization_id)
+            sql += " ORDER BY id"
             cur.execute(sql, params)
             return list(cur.fetchall())
 
@@ -219,7 +220,8 @@ def _dedupe_rules(rows: list[dict]) -> list[dict]:
     seen = set()
     unique = []
     for row in rows:
-        key = ((row.get("category") or "").strip().lower(), (row.get("rule_text") or "").strip())
+        text = re.sub(r"\s+", " ", (row.get("rule_text") or "").strip().lower())
+        key = ((row.get("category") or "").strip().lower(), text)
         if not key[1] or key in seen:
             continue
         seen.add(key)

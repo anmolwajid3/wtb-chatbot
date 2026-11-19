@@ -9,7 +9,7 @@ guarantee described in blueprint Section 9.3 — this node cannot invent
 anything because it is never given anything to invent from.
 """
 import re
-from app.agents.guardrail_check import visitor_advice_rule
+from app.agents.guardrail_check import collapse_repeated_text, visitor_advice_rule
 from app.agents.grounding import (
     compose_match_reply,
     compose_no_match_reply,
@@ -457,13 +457,21 @@ def run_formatter(state: dict) -> dict:
         prompt = prompt_template.format(**format_kwargs)
     except (KeyError, IndexError):
         prompt = FORMATTER_SYSTEM_PROMPT_DEFAULT.format(**format_kwargs)
-    prompt += (
-        "\n\nNEVER give medical or legal advice. If the visitor asked for either, "
-        "refuse in one sentence and then continue with the coaching conversation."
+    extra = (
         "\nYou MUST keep every coach_name from the verified list above in your reply."
         "\nIf the coach list is empty, do not invent a coach or program name."
         f"\nAlways write the entire reply in {language_label(locale)}."
+        "\nIf a stored program description is in another language, do not copy it. "
+        "Use the coach name and program name only, and write the sentence around them "
+        f"in {language_label(locale)}."
     )
+    if "medical or legal advice" not in prompt.lower() and "lääketieteell" not in prompt.lower():
+        extra = (
+            "\nNEVER give medical or legal advice. If the visitor asked for either, "
+            "refuse in one sentence and then continue with the coaching conversation."
+            + extra
+        )
+    prompt = collapse_repeated_text(prompt + extra)
     if settings["show_match_score"] and coaches:
         prompt += "\nWhen you name a profile, include its match_score as a percentage."
 

@@ -17,6 +17,7 @@ turn, regardless of outcome, rather than risking an open-ended back-and-forth.
 from pydantic import BaseModel, Field
 from app.llm import get_llm
 from app.agents.grounding import reply_is_grounded
+from app.i18n import reply_language_ok
 from app.db.connection import fetch_coaches_by_ids, get_agent_prompt
 
 
@@ -90,7 +91,12 @@ def run_response_reviewer(state: dict) -> dict:
         matching_attempted = bool(state.get("ready_to_match"))
         # Reject rewrites that drop coach names or otherwise leave the rails —
         # keeping the already-grounded draft is better than a drifting "fix".
-        if revised and reply_is_grounded(revised, coaches, matching_attempted):
+        locale = state.get("locale") or state.get("reply_locale")
+        if (
+            revised
+            and reply_is_grounded(revised, coaches, matching_attempted)
+            and reply_language_ok(revised, locale)
+        ):
             state["final_reply"] = revised
         else:
             # The reviewer flagged a problem but didn't provide a safe fix.

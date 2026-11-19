@@ -3,41 +3,82 @@ Summarizer Agent.
 
 Runs once the conversation reaches a "matched" or "purchase_order" outcome
 and the customer has provided (or been asked for) contact info. Compiles a
-structured brief for the company's team — the "smart pre-qualification" requirement.
+structured brief for the company's team.
 
-Produces genuinely structured fields (not one paragraph) so the admin panel
-can render a scannable card rather than a wall of text.
+The brief is written in the conversation's language. A Finnish chat stores a
+Finnish summary, so the log does not stay in English.
 """
 import json
-from pydantic import BaseModel, Field
-from app.llm import get_llm
+
 from app.db.connection import save_quote_request
-from app.db.connection import save_quote_request, get_agent_prompt
+from app.i18n import normalize_locale
 
 
-class QuoteSummary(BaseModel):
-    need_summary: str = Field(description="A one to two sentence summary of what the customer is looking for")
-    key_details: list[str] = Field(
-        default_factory=list,
-        description="Short bullet-point facts gathered so far — group size, timing, theme, format, etc. "
-                    "Each item should be a short fragment, not a full sentence.",
-    )
-    open_questions: list[str] = Field(
-        default_factory=list,
-        description="Specific things still unknown or unconfirmed that the team needs to follow up on. "
-                    "Short fragments, not full sentences.",
-    )
-    next_step: str = Field(description="A single clear sentence describing what the team should do next")
-    contact_info: str | None = Field(default=None, description="Contact info if the customer provided any, else null")
+def _summary_fields(locale: str, slots: dict) -> dict:
+    need = str(slots.get("need_description") or slots.get("theme") or "").strip()
+    timing = str(slots.get("timing") or "").strip()
+    size = slots.get("group_size")
+    contact = str(slots.get("contact") or "").strip()
+    if locale == "fi":
+        summary = (
+            f"Kävijä tarvitsee valmennusta: {need}."
+            if need
+            else "Kävijä tarvitsee valmennusta tiimilleen."
+        )
+        details = []
+        if timing:
+            details.append(f"Aloitus: {timing}")
+        if size:
+            details.append(f"Ryhmäkoko: {size}")
+        if contact:
+            details.append(f"Yhteystieto: {contact}")
+        questions = []
+        if not timing:
+            questions.append("Aloitusajankohta")
+        if not contact:
+            questions.append("Yhteystieto")
+        nxt = "Tiimi ottaa yhteyttä ja lähettää tarjouksen."
+    else:
+        summary = (
+            f"The visitor needs coaching: {need}."
+            if need
+            else "The visitor needs coaching for their team."
+        )
+        details = []
+        if timing:
+            details.append(f"Start: {timing}")
+        if size:
+            details.append(f"Group size: {size}")
+        if contact:
+            details.append(f"Contact: {contact}")
+        questions = []
+        if not timing:
+            questions.append("Start date")
+        if not contact:
+            questions.append("Contact")
+        nxt = "The team follows up and sends a quote."
+    return {
+        "need_summary": summary,
+        "key_details": details,
+        "open_questions": questions,
+        "next_step": nxt,
+    }
 
 
-SUMMARY_SYSTEM_PROMPT_DEFAULT = """Summarize this conversation into a structured internal brief for the company's team.
-Be concise and factual — key_details and open_questions should be short fragments, not full sentences.
-Do not include pricing discussion since none should have occurred.
-
-Conversation:
-{conversation}
-"""
+def build_locale_summary(state: dict) -> dict:
+    """Structured brief in the session language, plus the other pack for the log view."""
+    locale = normalize_locale(state.get("locale") or state.get("reply_locale"))
+    slots = state.get("gathered_slots") or {}
+    chosen = _summary_fields(locale, slots)
+    other_locale = "en" if locale == "fi" else "fi"
+    return {
+        "locale": locale,
+        **chosen,
+        "by_locale": {
+            locale: chosen,
+            other_locale: _summary_fields(other_locale, slots),
+        },
+    }
 
 
 def run_summarizer(state: dict) -> dict:
@@ -45,32 +86,13 @@ def run_summarizer(state: dict) -> dict:
     if outcome not in ("matched", "purchase_order"):
         return state
 
-    conversation_text = "\n".join(f"{m['role']}: {m['content']}" for m in state["messages"])
-
-    #llm = get_llm(temperature=0.0)
-    llm = get_llm(temperature=0.0, agent_name="summarizer", organization_id=state.get("organization_id"))
-    structured_llm = llm.with_structured_output(QuoteSummary)
-
-    prompt_template = get_agent_prompt("summarizer", SUMMARY_SYSTEM_PROMPT_DEFAULT, state.get("organization_id"))
-    try:
-        prompt = prompt_template.format(conversation=conversation_text)
-    except (KeyError, IndexError):
-        prompt = SUMMARY_SYSTEM_PROMPT_DEFAULT.format(conversation=conversation_text)
-    result: QuoteSummary = structured_llm.invoke([{"role": "system", "content": prompt}])
-
-    structured_payload = json.dumps({
-        "need_summary": result.need_summary,
-        "key_details": result.key_details,
-        "open_questions": result.open_questions,
-        "next_step": result.next_step,
-    })
-
+    payload = build_locale_summary(state)
+    contact = str((state.get("gathered_slots") or {}).get("contact") or "")
     save_quote_request(
         conversation_id=state["conversation_id"],
-        summary_text=structured_payload,
-        contact_info=result.contact_info or "",
+        summary_text=json.dumps(payload),
+        contact_info=contact,
         is_purchase_order=(outcome == "purchase_order"),
     )
-
-    state["quote_summary"] = result.need_summary
+    state["quote_summary"] = payload["need_summary"]
     return state

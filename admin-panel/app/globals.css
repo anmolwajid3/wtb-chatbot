@@ -215,6 +215,14 @@ html.dark select:-webkit-autofill {
   letter-spacing: 0.01em;
   text-transform: capitalize;
 }
+.status-pill-active {
+  background: #0E1C12 !important;
+  color: #FFFFFF !important;
+}
+html.dark .status-pill-active {
+  background: #E7F6EA !important;
+  color: #0E1C12 !important;
+}
 .tag-active, html.light .tag-active,
 .tag-matched, html.light .tag-matched { background: #0E1C12 !important; color: #FFFFFF !important; }
 .tag-order, html.light .tag-order,
