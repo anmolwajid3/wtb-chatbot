@@ -35,6 +35,7 @@ from app.agents.guardrail_check import run_guardrail_check
 from app.agents.response_reviewer import run_response_reviewer
 from app.agents.summarizer import run_summarizer
 from app.db.connection import save_conversation_state, fetch_coaches_by_ids
+from app.agents.grounding import scrub_profile, strip_empty_template_tokens
 from app.i18n import normalize_locale, resolve_locale, t
 
 
@@ -611,6 +612,7 @@ def _handle_post_selection_message(conversation_id: str, message: str) -> dict:
         state["session_closed"] = True
         state["handoff_complete"] = True
 
+    reply = strip_empty_template_tokens(reply) if reply else reply
     if reply:
         state["messages"].append({"role": "assistant", "content": reply})
     state["final_reply"] = reply
@@ -724,7 +726,9 @@ def run_turn(
     # Belt-and-suspenders: keep locale even if a future schema drift drops it.
     result_state["locale"] = locale or result_state.get("locale") or "en"
 
-    result_state["messages"].append({"role": "assistant", "content": result_state["final_reply"]})
+    result_state["final_reply"] = strip_empty_template_tokens(result_state.get("final_reply") or "")
+    if result_state["final_reply"]:
+        result_state["messages"].append({"role": "assistant", "content": result_state["final_reply"]})
     _conversations_in_memory[conversation_id] = result_state
 
     # Persist to Postgres after every turn so nothing is lost and the
@@ -748,7 +752,8 @@ def run_turn(
     if matched_ids:
         scores = result_state.get("matched_coach_scores", {})
         coach_records = fetch_coaches_by_ids(matched_ids)
-        for c in coach_records:
+        for raw in coach_records:
+            c = scrub_profile(raw)
             coach_id = str(c.get("id"))
             image_urls = c.get("image_urls") or []
             coach_matches.append({

@@ -82,6 +82,52 @@ _STRINGS: dict[str, dict[str, str]] = {
             "miten tämä näkyy tiimissä?"
         ),
     },
+    "opener_need_clarify": {
+        "en": (
+            "I mean the situation you want help with. For example: a team that "
+            "has lost motivation, or managers who are new in the role. A sentence "
+            "or two is enough."
+        ),
+        "sv": (
+            "Jag menar situationen ni vill ha hjälp med. Till exempel ett team "
+            "som tappat motivationen, eller chefer som är nya i rollen. En eller "
+            "två meningar räcker."
+        ),
+        "fi": (
+            "Tarkoitan tilannetta, johon haluat apua. Esimerkiksi tiimi, jonka "
+            "motivaatio on kadonnut, tai esimiehet, jotka ovat uusia roolissaan. "
+            "Pari lausetta riittää."
+        ),
+    },
+    "opener_need_skip_offer": {
+        "en": "If that question isn't useful, say skip and we'll move on without it.",
+        "sv": "Om frågan inte hjälper, skriv hoppa så går vi vidare utan den.",
+        "fi": "Jos kysymys ei tunnu hyödylliseltä, kirjoita ohita, niin jatketaan ilman sitä.",
+    },
+    "ask_timing_clarify": {
+        "en": (
+            "I mean when you would like this to start. For example: next month, "
+            "this quarter, or no fixed date yet."
+        ),
+        "sv": (
+            "Jag menar när ni vill att det ska börja. Till exempel nästa månad, "
+            "det här kvartalet, eller inget fast datum ännu."
+        ),
+        "fi": (
+            "Tarkoitan sitä, milloin haluaisit tämän alkavan. Esimerkiksi ensi "
+            "kuussa, tällä neljänneksellä, tai ilman tarkkaa päivää."
+        ),
+    },
+    "ask_timing_skip_offer": {
+        "en": "If you don't have a start date, say skip and I'll look for a fit without one.",
+        "sv": "Om ni inte har ett startdatum, skriv hoppa så letar jag efter en matchning utan det.",
+        "fi": "Jos aloitusajankohtaa ei ole, kirjoita ohita, niin etsin sopivuuden ilman sitä.",
+    },
+    "skip_situation_then_timing": {
+        "en": "No problem, we can skip that. When would you want this to start?",
+        "sv": "Inga problem, vi kan hoppa över det. När skulle ni vilja börja?",
+        "fi": "Ei haittaa, voidaan ohittaa tuo. Milloin haluaisitte aloittaa?",
+    },
     "refuse_medical_legal": {
         "en": "I can't give medical or legal advice.",
         "sv": "Jag kan inte ge medicinsk eller juridisk rådgivning.",

@@ -13,8 +13,9 @@ Responsibilities (per blueprint Section 5.1):
 import re
 from pydantic import BaseModel, Field
 from app.llm import get_llm
+from app.agents.formatter import apply_warmup_skip
 from app.agents.guardrail_check import visitor_advice_rule
-from app.agents.grounding import looks_like_coaching_need
+from app.agents.grounding import is_confusion, is_warmup_skip, looks_like_coaching_need
 from app.db.connection import fetch_match_settings, get_agent_prompt
 
 
@@ -109,6 +110,8 @@ def _still_needs_the_agent(text: str, found_timing: str | None, slots: dict) -> 
 
 def _looks_like_a_situation(text: str) -> bool:
     """A real coaching/work need — not a short price question or personal aside."""
+    if is_confusion(text) or is_warmup_skip(text):
+        return False
     words = re.findall(r"[A-Za-z']+", text)
     if len(words) < 6:
         return False
@@ -149,22 +152,26 @@ def run_intent_router(state: dict) -> dict:
         state["ready_to_match"] = False
         return state
 
-    found_timing = _timing_phrase(latest_message)
+    asking_about_the_question = is_confusion(latest_message) or is_warmup_skip(latest_message)
+    found_timing = None if asking_about_the_question else _timing_phrase(latest_message)
     if found_timing and not slots.get("timing"):
         slots["timing"] = found_timing
-    found_size = _group_size(latest_message)
+    found_size = None if asking_about_the_question else _group_size(latest_message)
     if found_size and not slots.get("group_size"):
         slots["group_size"] = found_size
-    if _looks_like_a_situation(latest_message):
+    if not asking_about_the_question and _looks_like_a_situation(latest_message):
         existing_need = slots.get("need_description") or ""
         if latest_message not in existing_need:
             slots["need_description"] = f"{existing_need} {latest_message}".strip()
         if not slots.get("theme"):
             slots["theme"] = latest_message[:80]
 
-    understood_locally = bool(
-        _price_question_text(latest_message) or _looks_like_a_situation(latest_message) or found_timing
-    ) and not _still_needs_the_agent(latest_message, found_timing, slots)
+    understood_locally = asking_about_the_question or (
+        bool(
+            _price_question_text(latest_message) or _looks_like_a_situation(latest_message) or found_timing
+        )
+        and not _still_needs_the_agent(latest_message, found_timing, slots)
+    )
     if not understood_locally:
         llm = get_llm(temperature=0.0, agent_name="intent_router", organization_id=state.get("organization_id"))
         structured_llm = llm.with_structured_output(IntakeExtraction)
@@ -204,6 +211,12 @@ def run_intent_router(state: dict) -> dict:
                 existing = slots.get("need_description", "")
                 slots["need_description"] = f"{existing} {result.need_description}".strip()
 
+    prior_assistant = [
+        m.get("content") or ""
+        for m in state.get("messages", [])[:-1]
+        if m.get("role") == "assistant"
+    ]
+    slots = apply_warmup_skip(slots, latest_message, state.get("locale"), prior_assistant)
     state["gathered_slots"] = slots
     state["turn_count"] = state.get("turn_count", 0) + 1
 
